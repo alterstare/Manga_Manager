@@ -1,5 +1,5 @@
-appId: com.noth2.mangaviewer
-productName: MangaViewer
+appId: com.noth2.mangamanager
+productName: MangaManager
 publish:
   provider: github
   owner: alterstare

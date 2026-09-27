@@ -28,7 +28,7 @@ in a fresh context without re-deriving everything.
   - `build` = electron-vite production build (fast, ~900ms). Use to sanity-check.
   - Packaging: `npm run dist` (electron-builder). winCodeSign symlink step needs
     Developer Mode or admin — not needed for normal dev.
-- App `userData`: `%APPDATA%/manga-viewer/` — holds `works.json` (scanned library)
+- App `userData`: `%APPDATA%/MangaManager/` (packaged) — holds `works.json` (scanned library)
   and `settings.json`.
 
 ---

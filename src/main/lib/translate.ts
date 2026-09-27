@@ -313,8 +313,8 @@ async function openaiVisionTranslate(
       'Content-Type': 'application/json',
       Authorization: `Bearer ${settings.llmApiKey}`,
       // OpenRouter wants these (harmless for others).
-      'HTTP-Referer': 'https://localhost/manga-viewer',
-      'X-Title': 'MangaViewer'
+      'HTTP-Referer': 'https://localhost/manga-manager',
+      'X-Title': 'MangaManager'
     },
     body: JSON.stringify(body)
   })

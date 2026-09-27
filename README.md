@@ -1,6 +1,6 @@
-# Manga Viewer
+# Manga Manager
 
-로컬 만화 라이브러리 뷰어. 크롬풍 탭 UI, 폴더 자동 정리, 태그/즐겨찾기/랭크, hitomi.la 코드 인식.
+로컬 만화 라이브러리 관리자. 크롬풍 탭 UI, 폴더 자동 정리, 태그/즐겨찾기/랭크, hitomi.la 코드 인식.
 Electron + React + TypeScript.
 
 ## 실행
@@ -78,5 +78,5 @@ src/
     src/components/  TabBar · Home · Reader · Settings · WorkCard · Stars · Thumb
 ```
 
-데이터는 `%APPDATA%/manga-viewer/` 의 `works.json` · `settings.json` · `session.json` 에 저장.
+데이터는 `%APPDATA%/MangaManager/` 의 `works.json` · `settings.json` · `session.json` 에 저장.
 원본 이미지는 이동/삭제하지 않음 (즐겨찾기 폴더 이동 제외).
