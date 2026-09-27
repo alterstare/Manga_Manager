@@ -3,7 +3,7 @@ productName: MangaManager
 publish:
   provider: github
   owner: alterstare
-  repo: Manga_viewer
+  repo: Manga_Manager
 directories:
   output: dist
   buildResources: build
