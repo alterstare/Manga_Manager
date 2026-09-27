@@ -1,6 +1,6 @@
 {
   "name": "manga-viewer",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Local manga library viewer with Chrome-like tabs and hitomi.la metadata",
   "main": "./out/main/index.js",
   "author": "noth2",

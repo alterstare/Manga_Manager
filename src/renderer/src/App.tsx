@@ -50,9 +50,13 @@ export default function App(): JSX.Element {
   const [browseSeen, setBrowseSeen] = useState(false)
   useEffect(() => {
     if (view === 'browse') setBrowseSeen(true)
-    // Entering hitomi online without an address set → prompt to enter it.
-    if (view === 'browse' && useStore.getState().libraryMode === 'hitomi' && !useStore.getState().settings.hitomiBaseUrl)
-      setAskAddr(true)
+    // Entering online without a site address set (per mode) → prompt to enter it.
+    if (view === 'browse') {
+      const st = useStore.getState()
+      const missing =
+        st.libraryMode === 'normal' ? !st.settings.tokiBaseUrl : !st.settings.hitomiBaseUrl
+      if (missing) setAskAddr(true)
+    }
   }, [view])
 
   // Boot: load persisted settings, cached works, and the previous tab session.
@@ -212,8 +216,12 @@ export default function App(): JSX.Element {
       {askAddr && (
         <ConfirmModal
           icon="🌐"
-          title="히토미 온라인 주소를 입력하세요"
-          desc="온라인 둘러보기·검색·다운로드를 사용하려면 설정 → 네트워크에서 히토미 콘텐츠 서버 주소를 입력해야 합니다. 지금 설정을 열까요?"
+          title={libraryMode === 'normal' ? '만화 사이트 온라인 주소를 입력하세요' : '히토미 온라인 주소를 입력하세요'}
+          desc={
+            libraryMode === 'normal'
+              ? '온라인 둘러보기·검색·다운로드를 사용하려면 설정 → 네트워크에서 만화 사이트 온라인 주소를 입력해야 합니다. 지금 설정을 열까요?'
+              : '온라인 둘러보기·검색·다운로드를 사용하려면 설정 → 네트워크에서 히토미 온라인 주소를 입력해야 합니다. 지금 설정을 열까요?'
+          }
           confirmLabel="설정 열기"
           cancelLabel="나중에"
           onConfirm={() => {

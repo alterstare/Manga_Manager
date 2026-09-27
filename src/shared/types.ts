@@ -312,7 +312,7 @@ export const DEFAULT_SETTINGS: Settings = {
   normalDownloadDir: null,
   textExportDir: null,
   deletedDir: null,
-  tokiBaseUrl: 'https://sbxh9.com',
+  tokiBaseUrl: '', // '' = online disabled until the user enters the current site address
   organizeByLanguage: false,
   langDirs: { english: null, japanese: null, other: null },
   autoOrganizeOnScan: false,

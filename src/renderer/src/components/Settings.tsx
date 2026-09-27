@@ -1554,28 +1554,28 @@ export default function Settings(): JSX.Element {
             <div className="set-block">
               <SettingRow
                 title="온라인 주소 입력"
-                desc="히토미 사이트 주소. 이 주소를 입력해야 온라인 접속(둘러보기·검색·다운로드)이 됩니다. 보통 https://hitomi.la 를 넣으면 됩니다. (CDN 도메인을 직접 아는 경우 그 주소를 넣어도 됩니다.)"
+                desc="히토미 사이트 주소. 이 주소를 입력해야 온라인 접속(둘러보기·검색·다운로드)이 됩니다."
               />
               <input
                 type="text"
                 className="field-input"
                 value={draft.hitomiBaseUrl}
                 onChange={(e) => patch({ hitomiBaseUrl: e.target.value.trim() })}
-                placeholder="예: https://hitomi.la"
+                placeholder="온라인 주소를 입력하세요"
               />
             </div>
           ) : (
             <div className="set-block">
               <SettingRow
                 title="온라인 주소 입력"
-                desc="일반 만화 온라인의 주소. 도메인이 자주 바뀌므로 접속이 안 되면 최신 주소로 바꾸세요."
+                desc="만화 사이트 온라인 주소. 도메인이 자주 바뀌므로 접속이 안 되면 최신 주소로 바꾸세요."
               />
               <input
                 type="text"
                 className="field-input"
                 value={draft.tokiBaseUrl}
                 onChange={(e) => patch({ tokiBaseUrl: e.target.value })}
-                placeholder="https://sbxh9.com"
+                placeholder="온라인 주소를 입력하세요"
               />
             </div>
           )}
