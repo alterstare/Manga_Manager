@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, session, Menu, nativeTheme } from 'electron'
+import electronUpdater from 'electron-updater'
 import { join, resolve, sep, basename, dirname } from 'path'
 import { pathToFileURL } from 'url'
 import { promises as fs } from 'fs'
@@ -369,6 +370,17 @@ app.whenReady().then(async () => {
   registerIpc()
 
   createWindow()
+
+  // Auto-update from GitHub Releases (publish config in electron-builder.yml).
+  // Packaged builds only — in dev there's no app-update.yml and it would throw.
+  // Downloads a newer release in the background; installs on next quit. Works for
+  // the NSIS installer (win) and AppImage (linux); zip/tar.gz are not updatable.
+  if (app.isPackaged) {
+    const { autoUpdater } = electronUpdater
+    autoUpdater.autoDownload = true
+    autoUpdater.on('error', (e) => console.error('[updater]', e?.message ?? e))
+    autoUpdater.checkForUpdatesAndNotify().catch((e) => console.error('[updater]', e))
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

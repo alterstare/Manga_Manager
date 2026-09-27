@@ -1,5 +1,9 @@
 appId: com.noth2.mangaviewer
 productName: MangaViewer
+publish:
+  provider: github
+  owner: alterstare
+  repo: Manga_viewer
 directories:
   output: dist
   buildResources: build
