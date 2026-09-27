@@ -1,0 +1,25 @@
+appId: com.noth2.mangaviewer
+productName: MangaViewer
+directories:
+  output: dist
+  buildResources: build
+files:
+  - out/**/*
+  - package.json
+extraResources:
+  - from: resources
+    to: .
+    filter:
+      - '**/*'
+win:
+  target:
+    - nsis
+    - zip
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+linux:
+  target:
+    - AppImage
+    - tar.gz
+  category: Graphics
