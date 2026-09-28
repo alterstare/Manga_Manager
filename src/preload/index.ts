@@ -115,6 +115,11 @@ const api: Api = {
     ipcRenderer.on(IPC.requestClose, listener)
     return () => ipcRenderer.removeListener(IPC.requestClose, listener)
   },
+  onTokiChallenge: (cb) => {
+    const listener = (_e: unknown, active: boolean): void => cb(active)
+    ipcRenderer.on(IPC.tokiChallenge, listener)
+    return () => ipcRenderer.removeListener(IPC.tokiChallenge, listener)
+  },
   onNavBack: (cb) => {
     const listener = (): void => cb()
     ipcRenderer.on(IPC.navBack, listener)

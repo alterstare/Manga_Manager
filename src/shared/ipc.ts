@@ -140,6 +140,7 @@ export const IPC = {
   tokiScrapeList: 'toki:scrapeList',
   tokiDownloadGeneric: 'toki:downloadGeneric',
   tokiOpenSite: 'toki:openSite',
+  tokiChallenge: 'toki:challenge', // main -> renderer: Cloudflare auth window shown/cleared
   saveThumb: 'thumb:save',
   getThumb: 'thumb:get',
   pickImage: 'dialog:pickImage',
@@ -356,6 +357,8 @@ export interface Api {
   openFolder: (path: string) => Promise<void>
   // Main asks the renderer to show the styled exit modal.
   onRequestClose: (cb: () => void) => () => void
+  // Cloudflare auth window shown (true) / cleared (false) — show a banner.
+  onTokiChallenge: (cb: (active: boolean) => void) => () => void
   // Mouse "back" side button / browser-backward app command → go back.
   onNavBack: (cb: () => void) => () => void
   // Mouse "forward" side button / browser-forward app command → go forward.

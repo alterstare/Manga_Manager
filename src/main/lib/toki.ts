@@ -14,7 +14,7 @@
 // so we drive them by clicking in-page, then scrape `a.card`. Chapter rows are
 // `li.ep-row-v2 > a.ep-row-v2-link`; chapter images are tuned live (no saved
 // viewer page).
-import { BrowserWindow, session } from 'electron'
+import { BrowserWindow, session, app } from 'electron'
 import { promises as fs } from 'fs'
 import { join } from 'path'
 import type {
@@ -45,6 +45,21 @@ const SORT_LABEL: Record<TokiSort, string> = {
 // --- hidden window (lazy, reused, serialized) ---
 let win: BrowserWindow | null = null
 let chain: Promise<unknown> = Promise.resolve()
+
+// Notified when a Cloudflare challenge needs the user (window popped) and when it
+// clears, so the app can show/hide an "인증이 필요합니다" banner. Set by main.
+let onChallenge: ((active: boolean) => void) | null = null
+export function setTokiChallengeHandler(fn: (active: boolean) => void): void {
+  onChallenge = fn
+}
+
+// The scraper window's 'close' handler vetoes close (keeps the session alive), but
+// that veto would also cancel app.quit() and strand the process in the background.
+// Force-destroy it as soon as the app starts quitting so shutdown is clean.
+app.on('before-quit', () => {
+  if (win && !win.isDestroyed()) win.destroy()
+  win = null
+})
 
 function getWindow(): BrowserWindow {
   if (win && !win.isDestroyed()) return win
@@ -175,6 +190,7 @@ async function ensure(url: string, needContent: boolean): Promise<void> {
         shown = true
         w.show()
         w.focus()
+        onChallenge?.(true) // tell the app to show the "인증 필요" banner
       }
       if (Date.now() - start > 180000) break // give up after 3 min
       continue
@@ -185,6 +201,7 @@ async function ensure(url: string, needContent: boolean): Promise<void> {
   // Only hide if we popped it open for a challenge AND it's now resolved, so the
   // user isn't left staring at a blank window — but don't thrash on every call.
   if (shown && win && !win.isDestroyed() && (await hasClearance())) win.hide()
+  if (shown) onChallenge?.(false) // clear the banner (solved, or gave up)
 }
 
 async function evalPage<T>(script: string, fallback: T): Promise<T> {

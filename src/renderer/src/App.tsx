@@ -88,6 +88,10 @@ export default function App(): JSX.Element {
   // Main intercepts the window X and asks us to show the styled exit modal.
   useEffect(() => window.api.onRequestClose(() => setShowExit(true)), [])
 
+  // Cloudflare auth: main pops its browser window and tells us to show a banner.
+  const [cfChallenge, setCfChallenge] = useState(false)
+  useEffect(() => window.api.onTokiChallenge((active) => setCfChallenge(active)), [])
+
   // Record each location change into the nav history (deduped in the store), so
   // the mouse back/forward buttons can step through it browser-style.
   useEffect(() => {
@@ -149,8 +153,16 @@ export default function App(): JSX.Element {
           const n = e.shiftKey ? (i - 1 + list.length) % list.length : (i + 1) % list.length
           st.activateTab(list[n].id)
         }
-      } else if (mod && /^[1-9]$/.test(e.key)) {
-        // Ctrl+1..9 — jump to the Nth tab (9 = last).
+      } else if (mod && e.key === '1') {
+        // Ctrl+1 — local library (home list).
+        e.preventDefault()
+        st.goHome()
+      } else if (mod && e.key === '2') {
+        // Ctrl+2 — online library (browse).
+        e.preventDefault()
+        st.goBrowse()
+      } else if (mod && /^[3-9]$/.test(e.key)) {
+        // Ctrl+3..9 — jump to the Nth tab (9 = last).
         e.preventDefault()
         const list = st.tabs.filter((t) => !t.glance)
         const n = e.key === '9' ? list.length - 1 : Number(e.key) - 1
@@ -212,6 +224,11 @@ export default function App(): JSX.Element {
       <ActivityBar />
       <Tooltip />
       <GlanceOverlay />
+      {cfChallenge && (
+        <div className="cf-banner">
+          🔒 사이트 인증이 필요합니다. 방금 뜬 창에서 “사람인지 확인”을 완료해 주세요. 완료되면 자동으로 진행됩니다.
+        </div>
+      )}
       {showExit && <ExitModal onChoose={onExit} />}
       {askAddr && (
         <ConfirmModal

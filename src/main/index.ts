@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, session, Menu, nativeTheme } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, session, Menu, nativeTheme, globalShortcut } from 'electron'
 import electronUpdater from 'electron-updater'
 import { join, resolve, sep, basename, dirname } from 'path'
 import { pathToFileURL } from 'url'
@@ -43,7 +43,8 @@ import {
   tokiSeriesTitle,
   tokiAuthorForTitle,
   tokiScrapeList,
-  downloadGenericChapters
+  downloadGenericChapters,
+  setTokiChallengeHandler
 } from './lib/toki'
 import type {
   HitomiProgress,
@@ -232,6 +233,7 @@ function parseFavoriteTags(raw: any): string[] {
 
 let mainWindow: BrowserWindow | null = null
 let closing = false
+let quitting = false
 
 function createWindow(): void {
   // Remove the native File/Edit/View/Window/Help menu bar entirely.
@@ -264,6 +266,18 @@ function createWindow(): void {
     mainWindow?.show()
   })
 
+  // Null the ref once the window is gone. Without this, mainWindow stays a
+  // DESTROYED BrowserWindow (not null), so the many `mainWindow?.webContents.send`
+  // guards pass the null check and then throw "Object has been destroyed" — e.g.
+  // a toki/download progress callback still in flight after the app was closed.
+  mainWindow.on('closed', () => {
+    mainWindow = null
+    // Force-close any leftover windows (e.g. the toki scraper window, which has a
+    // close-vetoing handler). destroy() bypasses that veto, so window-all-closed
+    // fires and the app actually quits instead of lingering as a zombie.
+    for (const w of BrowserWindow.getAllWindows()) w.destroy()
+  })
+
   // F12 / Ctrl+Shift+I toggles DevTools (no app menu, so wire it manually).
   mainWindow.webContents.on('before-input-event', (_e, input) => {
     if (input.type !== 'keyDown') return
@@ -282,9 +296,21 @@ function createWindow(): void {
   // Intercept the close (X) button → show the in-app styled exit modal.
   // The renderer reports the decision back via IPC.closeWindow.
   mainWindow.on('close', (e) => {
-    if (closing) return // already confirmed → let it close
+    if (closing || quitting) return // already confirmed / app quitting → let it close
+    // If the renderer is dead (crashed → black screen), the exit modal can never
+    // show, so don't veto the close — let the window actually close.
+    if (mainWindow?.webContents.isCrashed()) return
     e.preventDefault()
     mainWindow?.webContents.send(IPC.requestClose)
+  })
+
+  // Renderer crashed (black screen). Auto-reload once so the app recovers instead
+  // of stranding a dead window the user can't get past.
+  mainWindow.webContents.on('render-process-gone', (_e, details) => {
+    console.error('[renderer gone]', details.reason)
+    if (details.reason !== 'clean-exit' && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.reload()
+    }
   })
 
   if (process.env['MV_DIAG']) {
@@ -317,7 +343,7 @@ if (!gotSingleLock) {
   app.quit()
 } else if (!isDev) {
   app.on('second-instance', () => {
-    if (mainWindow) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
       if (mainWindow.isMinimized()) mainWindow.restore()
       mainWindow.focus()
     }
@@ -371,6 +397,17 @@ app.whenReady().then(async () => {
 
   createWindow()
 
+  // Emergency force-quit that works even when the renderer is a black screen
+  // (no DOM key events reach the app then). app.exit() hard-terminates the
+  // process + all child windows immediately, bypassing any close vetoes.
+  globalShortcut.register('CommandOrControl+Shift+Q', () => app.exit(0))
+
+  // Cloudflare auth window shown/cleared → banner in the renderer. Guarded send
+  // (mainWindow may be null/destroyed after close) is safe now that 'closed' nulls it.
+  setTokiChallengeHandler((active) => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(IPC.tokiChallenge, active)
+  })
+
   // Auto-update from GitHub Releases (publish config in electron-builder.yml).
   // Packaged builds only — in dev there's no app-update.yml and it would throw.
   // Downloads a newer release in the background; installs on next quit. Works for
@@ -386,6 +423,13 @@ app.whenReady().then(async () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
+
+// Set once quit begins so window 'close' vetoes (main + toki scraper) stand down
+// and the process can actually exit instead of lingering in the background.
+app.on('before-quit', () => {
+  quitting = true
+})
+app.on('will-quit', () => globalShortcut.unregisterAll())
 
 app.on('window-all-closed', async () => {
   await store.flushWorks()
