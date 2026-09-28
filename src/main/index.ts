@@ -414,9 +414,26 @@ app.whenReady().then(async () => {
   // the NSIS installer (win) and AppImage (linux); zip/tar.gz are not updatable.
   if (app.isPackaged) {
     const { autoUpdater } = electronUpdater
-    autoUpdater.autoDownload = true
-    autoUpdater.on('error', (e) => console.error('[updater]', e?.message ?? e))
-    autoUpdater.checkForUpdatesAndNotify().catch((e) => console.error('[updater]', e))
+    autoUpdater.autoDownload = true // download in the background as soon as found
+    autoUpdater.autoInstallOnAppQuit = true // also install on a normal quit
+    const send = (s: import('../shared/ipc').UpdateStatus): void => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(IPC.updateStatus, s)
+    }
+    autoUpdater.on('update-available', (i) => send({ state: 'available', version: i.version }))
+    autoUpdater.on('download-progress', (p) =>
+      send({ state: 'downloading', percent: Math.round(p.percent) })
+    )
+    autoUpdater.on('update-downloaded', (i) => send({ state: 'downloaded', version: i.version }))
+    autoUpdater.on('error', (e) => {
+      console.error('[updater]', e?.message ?? e)
+      send({ state: 'error', error: String(e?.message ?? e) })
+    })
+    autoUpdater.checkForUpdates().catch((e) => console.error('[updater]', e))
+    // User clicked "지금 재시작" — install the downloaded update now.
+    ipcMain.on(IPC.installUpdate, () => {
+      quitting = true
+      autoUpdater.quitAndInstall()
+    })
   }
 
   app.on('activate', () => {

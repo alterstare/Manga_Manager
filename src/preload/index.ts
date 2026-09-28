@@ -120,6 +120,12 @@ const api: Api = {
     ipcRenderer.on(IPC.tokiChallenge, listener)
     return () => ipcRenderer.removeListener(IPC.tokiChallenge, listener)
   },
+  onUpdateStatus: (cb) => {
+    const listener = (_e: unknown, s: import('../shared/ipc').UpdateStatus): void => cb(s)
+    ipcRenderer.on(IPC.updateStatus, listener)
+    return () => ipcRenderer.removeListener(IPC.updateStatus, listener)
+  },
+  installUpdate: () => ipcRenderer.send(IPC.installUpdate),
   onNavBack: (cb) => {
     const listener = (): void => cb()
     ipcRenderer.on(IPC.navBack, listener)

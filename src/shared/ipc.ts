@@ -150,8 +150,18 @@ export const IPC = {
   requestClose: 'app:requestClose', // main -> renderer: show exit modal
   closeWindow: 'app:closeWindow', // renderer -> main: exit decision
   navBack: 'app:navBack', // main -> renderer: mouse/back-command → go back
-  navForward: 'app:navForward' // main -> renderer: mouse/forward-command → go forward
+  navForward: 'app:navForward', // main -> renderer: mouse/forward-command → go forward
+  updateStatus: 'update:status', // main -> renderer: auto-update progress/state
+  installUpdate: 'update:install' // renderer -> main: quit and install the downloaded update
 } as const
+
+// Auto-update lifecycle surfaced in the activity bar.
+export interface UpdateStatus {
+  state: 'available' | 'downloading' | 'downloaded' | 'error'
+  version?: string
+  percent?: number // 0-100 while downloading
+  error?: string
+}
 
 // User's choice in the exit modal.
 export type CloseDecision = 'keep' | 'clear' | 'cancel'
@@ -357,6 +367,10 @@ export interface Api {
   openFolder: (path: string) => Promise<void>
   // Main asks the renderer to show the styled exit modal.
   onRequestClose: (cb: () => void) => () => void
+  // Auto-update state pushed from main (available → downloading → downloaded).
+  onUpdateStatus: (cb: (s: UpdateStatus) => void) => () => void
+  // User clicked "지금 재시작" on the downloaded-update row → quit + install.
+  installUpdate: () => void
   // Cloudflare auth window shown (true) / cleared (false) — show a banner.
   onTokiChallenge: (cb: (active: boolean) => void) => () => void
   // Mouse "back" side button / browser-backward app command → go back.

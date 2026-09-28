@@ -92,6 +92,9 @@ export default function App(): JSX.Element {
   const [cfChallenge, setCfChallenge] = useState(false)
   useEffect(() => window.api.onTokiChallenge((active) => setCfChallenge(active)), [])
 
+  // Auto-update progress → shown as a row in the activity bar.
+  useEffect(() => window.api.onUpdateStatus((s) => useStore.getState().setUpdate(s)), [])
+
   // Record each location change into the nav history (deduped in the store), so
   // the mouse back/forward buttons can step through it browser-style.
   useEffect(() => {

@@ -3019,6 +3019,10 @@ body.resizing {
 .activity-row + .activity-row {
   border-top: 1px solid var(--line);
 }
+/* Auto-update row: tinted so it stands out from download/scan rows. */
+.activity-row.update {
+  background: var(--accent-soft);
+}
 .activity-row-icon {
   font-size: 16px;
 }

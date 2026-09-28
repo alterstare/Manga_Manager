@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { Work, Settings, SortMode, SessionState, OnlineFav, FitMode } from '../../shared/types'
 import { DEFAULT_SETTINGS } from '../../shared/types'
-import type { HitomiListSource, HitomiProgress, TokiChapter } from '../../shared/ipc'
+import type { HitomiListSource, HitomiProgress, TokiChapter, UpdateStatus } from '../../shared/ipc'
 import { exportWorkText, exportWorkImages } from './export'
 import { warmThumbs } from './thumbs'
 import { convertWorkToWebp } from './convert'
@@ -222,6 +222,9 @@ interface AppState {
   onlineFavs: Record<string, OnlineFav> // hitomi gallery favorites/ranks by code
   jobs: Job[] // background tasks (export/scan) this session, newest first
   activityOpen: boolean // is the activity panel (above the bar) expanded
+  update: UpdateStatus | null // auto-update state, shown as a row in the activity bar
+  setUpdate: (s: UpdateStatus) => void
+  installUpdate: () => void // quit + install the downloaded update
 
   // Job helpers + the tasks that run through them (kept in the store so they
   // survive view switches — progress + completion show in the global activity bar).
@@ -569,6 +572,7 @@ export const useStore = create<AppState>((set, get) => ({
   onlineFavs: {},
   jobs: [],
   activityOpen: false,
+  update: null,
 
   setWorks: (works) => set({ works }),
   upsertWork: (w) => set((st) => ({ works: st.works.map((x) => (x.id === w.id ? w : x)) })),
@@ -1396,6 +1400,8 @@ export const useStore = create<AppState>((set, get) => ({
   },
   toggleActivity: (open) =>
     set((st) => ({ activityOpen: open === undefined ? !st.activityOpen : open })),
+  setUpdate: (s) => set({ update: s }),
+  installUpdate: () => window.api.installUpdate(),
   clearDoneJobs: () =>
     set((st) => ({
       jobs: st.jobs.filter((j) => j.status === 'running'),
