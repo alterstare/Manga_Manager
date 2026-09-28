@@ -15,6 +15,10 @@ jobs:
   release:
     strategy:
       fail-fast: false
+      # Run one OS at a time: parallel jobs both try to create the same draft
+      # release and race, so one platform's assets silently fail to upload. Serial
+      # → the second job reuses the release the first created.
+      max-parallel: 1
       matrix:
         os: [windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
