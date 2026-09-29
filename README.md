@@ -1,6 +1,6 @@
 # Manga Manager
 
-로컬 만화 라이브러리 관리자. 크롬풍 탭 UI, 폴더 자동 정리, 태그/즐겨찾기/랭크, hitomi.la 코드 인식
+동인지 및 일반만화 라이브러리 관리자. 폴더 자동 정리, 태그/즐겨찾기/랭크
 Electron + React + TypeScript
 
 ## 실행
