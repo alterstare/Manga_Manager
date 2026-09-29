@@ -5,6 +5,7 @@ import { selectWorks, SORT_LABELS, groupSeries, matchesSearch, tagTokens, tokenL
 import type { SortMode } from '../../../shared/types'
 import { langCategory, LANG_CAT_LABELS, type LangCat } from '../../../shared/lang'
 import Caret from './Caret'
+import { SearchIcon, SyncIcon, GridIcon, MenuIcon, FavoriteIcon } from './icons'
 import Dropdown from './Dropdown'
 import WorkCard from './WorkCard'
 import WorkGridCard from './WorkGridCard'
@@ -392,12 +393,12 @@ export default function Home(): JSX.Element {
             tokens={libTokens}
             placeholder={normal ? '시리즈 제목·태그 검색 후 Enter' : '제목, 코드, 태그, artist:작가명 / tag:태그명 으로 검색 후 Enter'}
           />
-          <button className="btn" onClick={() => setSearch(query.trim())}>
-            검색
+          <button className="btn primary" onClick={() => setSearch(query.trim())} title="검색">
+            <SearchIcon />
           </button>
           {sort === 'random' && (
-            <button className="btn" onClick={reshuffle}>
-              ⟳
+            <button className="btn" onClick={reshuffle} title="무작위 다시 섞기">
+              <SyncIcon />
             </button>
           )}
         </div>
@@ -408,18 +409,7 @@ export default function Home(): JSX.Element {
             onClick={() => setHomeLayout(homeLayout === 'grid' ? 'list' : 'grid')}
             title={homeLayout === 'grid' ? '격자형' : '목록형'}
           >
-            {homeLayout === 'grid' ? (
-              <span className="ic-grid" aria-hidden>
-                <i />
-                <i />
-                <i />
-                <i />
-              </span>
-            ) : (
-              <span className="ic-menu" aria-hidden>
-                ☰
-              </span>
-            )}
+            {homeLayout === 'grid' ? <GridIcon /> : <MenuIcon />}
           </button>
           <button
             className="chip layout-toggle"
@@ -443,7 +433,7 @@ export default function Home(): JSX.Element {
                   setFilter({ kind: 'favorites' })
                 }}
               >
-                ♥ 즐겨찾기 {favCount}
+                <FavoriteIcon filled className="fav-ico" /> 즐겨찾기 {favCount}
               </span>
               <span className="fav-caret" onClick={() => togglePanel('fav')} title="즐겨찾기 목록">
                 <span className={`dt ${openPanel === 'fav' ? 'up' : ''}`} />

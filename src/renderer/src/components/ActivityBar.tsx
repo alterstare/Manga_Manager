@@ -1,15 +1,26 @@
 import { useEffect, useRef } from 'react'
-import type { JSX } from 'react'
+import type { JSX, ReactNode } from 'react'
 import { useStore, downloadMode } from '../store'
 import type { Job } from '../store'
 import type { HitomiProgress } from '../../../shared/ipc'
-import { PauseIcon, PlayIcon, XIcon, ConvertIcon } from './icons'
+import {
+  PauseIcon,
+  PlayIcon,
+  XIcon,
+  ConvertIcon,
+  Download2Icon,
+  DescriptionIcon,
+  ScanIcon,
+  EditIcon,
+  AddPhotoIcon,
+  FolderIcon
+} from './icons'
 
 // Unified row for the activity list: background jobs (export/scan) merged with the
 // online downloads (which also carry the avif→webp conversion on the same row).
 interface Row {
   id: string
-  icon: string
+  icon: ReactNode
   title: string
   status: 'running' | 'done' | 'error'
   done: number
@@ -20,13 +31,13 @@ interface Row {
   dl?: { code: string; phase: HitomiProgress['phase']; canStop: boolean; canRetry: boolean }
 }
 
-const KIND_ICON: Record<Job['kind'], string> = {
-  export: '📄',
-  scan: '🔄',
-  meta: '🖋',
-  thumb: '🖼',
-  organize: '🗂',
-  convert: '♻'
+const KIND_ICON: Record<Job['kind'], ReactNode> = {
+  export: <DescriptionIcon />,
+  scan: <ScanIcon />,
+  meta: <EditIcon />,
+  thumb: <AddPhotoIcon />,
+  organize: <FolderIcon />,
+  convert: <ConvertIcon />
 }
 
 const ACTIVE = new Set<HitomiProgress['phase']>(['queued', 'fetching', 'downloading', 'enriching'])
@@ -82,7 +93,7 @@ export default function ActivityBar(): JSX.Element | null {
       .filter((d) => downloadMode(d.code) === libraryMode)
       .map((d) => ({
         id: `dl:${d.code}`,
-        icon: '⬇',
+        icon: <Download2Icon />,
         title: d.title,
         status: (d.phase === 'done' ? 'done' : d.phase === 'error' ? 'error' : 'running') as Row['status'],
         done: d.done,
@@ -116,7 +127,7 @@ export default function ActivityBar(): JSX.Element | null {
   const summary = showUpdate
     ? updateLabel
     : cur
-      ? `${cur.icon} ${cur.title}${cur.total > 0 ? ` · ${pct(cur.done, cur.total)}%` : ' · 진행 중…'}`
+      ? `${cur.title}${cur.total > 0 ? ` · ${pct(cur.done, cur.total)}%` : ' · 진행 중…'}`
       : `작업 ${rows.length}개 · 진행 중 없음`
   const anyActive = downloads.some((d) => downloadMode(d.code) === libraryMode && ACTIVE.has(d.phase))
   const anyPaused = downloads.some(

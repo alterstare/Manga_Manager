@@ -5,6 +5,7 @@ import { selectWorks, allTags, matchesSearch, analyzeSeries, seriesOf, tagToken,
 import type { SortMode, Work } from '../../../shared/types'
 import Thumb from './Thumb'
 import Stars from './Stars'
+import { SearchIcon } from './icons'
 import FavGroup from './FavGroup'
 import { ChapterRow } from './SeriesCard'
 import ContextMenu from './ContextMenu'
@@ -181,10 +182,7 @@ export default function LibraryList(): JSX.Element {
           placeholder="검색 후 Enter (태그/작가 클릭 시 추가)"
         />
         <button className="mini search-btn" onClick={apply} title="검색">
-          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden>
-            <circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" strokeWidth="2" />
-            <line x1="15.5" y1="15.5" x2="21" y2="21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-          </svg>
+          <SearchIcon />
         </button>
       </div>
       {applied && (

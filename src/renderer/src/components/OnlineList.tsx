@@ -7,7 +7,7 @@ import CopyCode from './CopyCode'
 import ContextMenu from './ContextMenu'
 import Stars from './Stars'
 import Dropdown from './Dropdown'
-import { CheckIcon, PauseIcon, PlayIcon } from './icons'
+import { CheckIcon, PauseIcon, PlayIcon, LanguageIcon, SearchIcon, FavoriteIcon, DownloadIcon, SyncIcon } from './icons'
 import OnlineThumb from './OnlineThumb'
 import { getOnlineImages } from '../images'
 import { favMeta, tagToken } from '../util'
@@ -103,8 +103,8 @@ export default function OnlineList(): JSX.Element {
   return (
     <div className="lib-list">
       <div className="lib-list-head">
-        <button className="mini" onClick={goBrowse}>
-          🌐
+        <button className="mini" onClick={goBrowse} title="온라인">
+          <LanguageIcon />
         </button>
         <Dropdown<OnlineSort>
           className="field sm"
@@ -124,8 +124,8 @@ export default function OnlineList(): JSX.Element {
           onKeyDown={(e) => e.key === 'Enter' && apply()}
           placeholder="제목, 코드, 태그, artist:작가명 / tag:태그명 으로 검색 후 Enter"
         />
-        <button className="mini" onClick={apply}>
-          검색
+        <button className="mini" onClick={apply} title="검색">
+          <SearchIcon />
         </button>
       </div>
       <div className="lib-list-scroll">
@@ -256,9 +256,9 @@ export default function OnlineList(): JSX.Element {
                         ) : done ? (
                           <CheckIcon />
                         ) : err ? (
-                          '↻'
+                          <SyncIcon />
                         ) : (
-                          '⬇'
+                          <DownloadIcon />
                         )}
                       </span>
                     )
@@ -271,7 +271,7 @@ export default function OnlineList(): JSX.Element {
                       toggleOnlineFav(g.code, favMeta(g))
                     }}
                   >
-                    {onlineFavs[g.code]?.favorite ? '♥' : '♥'}
+                    <FavoriteIcon filled={!!onlineFavs[g.code]?.favorite} />
                   </span>
                 </div>
               </div>

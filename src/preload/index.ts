@@ -126,6 +126,7 @@ const api: Api = {
     return () => ipcRenderer.removeListener(IPC.updateStatus, listener)
   },
   installUpdate: () => ipcRenderer.send(IPC.installUpdate),
+  resetApp: (deleteWorkFolders) => ipcRenderer.invoke(IPC.resetApp, deleteWorkFolders),
   onNavBack: (cb) => {
     const listener = (): void => cb()
     ipcRenderer.on(IPC.navBack, listener)

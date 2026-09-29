@@ -5,6 +5,7 @@ import type { Tab, TabGroup } from '../store'
 import ContextMenu from './ContextMenu'
 import type { MenuItem } from './ContextMenu'
 import { groupSeries, analyzeSeries } from '../util'
+import { HomeIcon, LanguageIcon, MenuIcon, DownloadIcon, SettingsIcon, CloseIcon } from './icons'
 
 export default function TabBar(): JSX.Element {
   const tabs = useStore((s) => s.tabs)
@@ -80,6 +81,8 @@ export default function TabBar(): JSX.Element {
     idx: number
     slot: number
     center: number
+    minTx: number // clamp so the dragged tab can't leave the strip on either side
+    maxTx: number
   } | null>(null)
   // True once a drag actually moved — used to swallow the click that follows a
   // drag so releasing a tab doesn't also activate it.
@@ -96,7 +99,22 @@ export default function TabBar(): JSX.Element {
     if (idx < 0) return
     const centers = rects.map((r) => r.left + r.width / 2)
     const gap = rects[idx + 1] ? rects[idx + 1].left - rects[idx].right : 3
-    drag.current = { id, startX: e.clientX, els, centers, idx, slot: rects[idx].width + gap, center: centers[idx] }
+    // Keep the dragged tab inside the strip's visible box — no spilling over the
+    // nav buttons on either side.
+    const strect = strip.getBoundingClientRect()
+    const minTx = strect.left - rects[idx].left
+    const maxTx = strect.right - rects[idx].right
+    drag.current = {
+      id,
+      startX: e.clientX,
+      els,
+      centers,
+      idx,
+      slot: rects[idx].width + gap,
+      center: centers[idx],
+      minTx,
+      maxTx
+    }
     dragMoved.current = false
     setDragId(id)
   }
@@ -106,7 +124,7 @@ export default function TabBar(): JSX.Element {
     const onMove = (e: MouseEvent): void => {
       const d = drag.current
       if (!d) return
-      const tx = e.clientX - d.startX
+      const tx = Math.max(d.minTx, Math.min(d.maxTx, e.clientX - d.startX))
       if (Math.abs(tx) > 4) dragMoved.current = true
       d.center = d.centers[d.idx] + tx
       d.els[d.idx].style.transform = `translateX(${tx}px)`
@@ -327,20 +345,20 @@ export default function TabBar(): JSX.Element {
           <span className="split-badge">⊟</span>
           <span className="tab-title">{titleOf(t)}</span>
           <span className="tab-close" onClick={(e) => { e.stopPropagation(); closeSplitSide(t.id, 'left') }}>
-            ×
+            <CloseIcon />
           </span>
           <span className="split-sep">│</span>
           <span className="tab-title">{rightTitleOf(t)}</span>
           <span className="tab-close" onClick={(e) => { e.stopPropagation(); closeSplitSide(t.id, 'right') }}>
-            ×
+            <CloseIcon />
           </span>
         </>
       ) : (
         <>
-          {t.online && <span className="tab-online-dot">🌐</span>}
+          {t.online && <span className="tab-online-dot"><LanguageIcon /></span>}
           <span className="tab-title">{titleOf(t)}</span>
           <span className="tab-close" onClick={(e) => { e.stopPropagation(); startClose(t.id) }}>
-            ×
+            <CloseIcon />
           </span>
         </>
       )}
@@ -353,13 +371,14 @@ export default function TabBar(): JSX.Element {
         className="tab menu-btn"
         onClick={() => useStore.getState().toggleMenu()}
       >
-        ☰
+        <MenuIcon />
       </button>
       <button
         className={`tab home-tab ${view === 'home' ? 'active' : ''}`}
         onClick={() => (view === 'home' ? useStore.getState().scrollHomeTop() : goHome())}
+        title="라이브러리"
       >
-        홈
+        <HomeIcon />
       </button>
       <button
         className={`tab icon-tab ${view === 'browse' ? 'active' : ''}`}
@@ -368,8 +387,9 @@ export default function TabBar(): JSX.Element {
             ? useStore.getState().scrollBrowseTop()
             : useStore.getState().goBrowse()
         }
+        title="온라인"
       >
-        🌐
+        <LanguageIcon />
       </button>
 
       <div className={`tab-strip ${dragId ? 'dragging' : ''}`} ref={stripRef}>
@@ -461,11 +481,12 @@ export default function TabBar(): JSX.Element {
       <button
         className={`tab icon-tab ${view === 'download' ? 'active' : ''}`}
         onClick={() => useStore.getState().goDownload()}
+        title="작업 목록"
       >
-        ⬇
+        <DownloadIcon />
       </button>
-      <button className={`tab icon-tab ${view === 'settings' ? 'active' : ''}`} onClick={() => useStore.getState().goSettings()}>
-        ⚙
+      <button className={`tab icon-tab ${view === 'settings' ? 'active' : ''}`} onClick={() => useStore.getState().goSettings()} title="설정">
+        <SettingsIcon />
       </button>
 
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.tab)} onClose={() => setMenu(null)} />}

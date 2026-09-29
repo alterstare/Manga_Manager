@@ -1,5 +1,6 @@
-import type { JSX } from 'react'
+import type { JSX, ReactNode } from 'react'
 import { useStore } from '../store'
+import { HomeIcon, LanguageIcon, MenuIcon, SettingsIcon, DownloadIcon, FavoriteIcon, AssignmentIcon, HistoryIcon, CompareArrowsIcon } from './icons'
 
 // Left slide-in navigation drawer (☰). Surfaces every screen plus the
 // hitomi ⇄ general-manga mode toggle. Existing tab-bar buttons still work; this
@@ -11,7 +12,7 @@ function Item({
   active,
   onClick
 }: {
-  icon: string
+  icon: ReactNode
   label: string
   active?: boolean
   onClick: () => void
@@ -66,7 +67,7 @@ export default function MenuDrawer(): JSX.Element {
       <nav className="menu-drawer">
         <div className="menu-head">
           <button className="menu-close" onClick={close}>
-            ☰
+            <MenuIcon />
           </button>
           <span className="menu-brand">메뉴</span>
         </div>
@@ -75,17 +76,17 @@ export default function MenuDrawer(): JSX.Element {
           className="menu-mode"
           onClick={() => go(() => setLibraryMode(normal ? 'hitomi' : 'normal'))}
         >
-          <span className="menu-item-ico">⇄</span>
+          <span className="menu-item-ico"><CompareArrowsIcon /></span>
           {normal ? '히토미 뷰어로 전환' : '일반 만화 뷰어로 전환'}
         </button>
         <div className="menu-mode-cur">현재: {normal ? '일반 만화' : '히토미'}</div>
 
         <div className="menu-sep" />
-        <Item icon="▤" label="라이브러리" active={view === 'home'} onClick={libraryClick} />
-        <Item icon="◍" label="온라인" active={view === 'browse'} onClick={onlineClick} />
-        <Item icon="♡" label="즐겨찾기" onClick={() => go(() => setFilter({ kind: 'favorites' }))} />
+        <Item icon={<HomeIcon />} label="라이브러리" active={view === 'home'} onClick={libraryClick} />
+        <Item icon={<LanguageIcon />} label="온라인" active={view === 'browse'} onClick={onlineClick} />
+        <Item icon={<FavoriteIcon />} label="즐겨찾기" onClick={() => go(() => setFilter({ kind: 'favorites' }))} />
         <Item
-          icon="↺"
+          icon={<HistoryIcon />}
           label="최근 본"
           onClick={() =>
             go(() => {
@@ -96,9 +97,9 @@ export default function MenuDrawer(): JSX.Element {
         />
 
         <div className="menu-sep" />
-        <Item icon="☰" label="작업 목록" active={view === 'download'} onClick={() => go(goDownload)} />
-        <Item icon="▥" label="관리" active={view === 'manage'} onClick={() => go(() => goManage('duplicates'))} />
-        <Item icon="⚙" label="설정" active={view === 'settings'} onClick={() => go(goSettings)} />
+        <Item icon={<DownloadIcon />} label="작업 목록" active={view === 'download'} onClick={() => go(goDownload)} />
+        <Item icon={<AssignmentIcon />} label="관리" active={view === 'manage'} onClick={() => go(() => goManage('duplicates'))} />
+        <Item icon={<SettingsIcon />} label="설정" active={view === 'settings'} onClick={() => go(goSettings)} />
       </nav>
     </div>
   )

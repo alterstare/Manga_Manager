@@ -238,16 +238,15 @@ let quitting = false
 function createWindow(): void {
   // Remove the native File/Edit/View/Window/Help menu bar entirely.
   Menu.setApplicationMenu(null)
-  // Force the OS dark caption so the title bar (title + min/max/close) matches
-  // the app's dark UI instead of following the system light theme.
-  nativeTheme.themeSource = 'dark'
-
+  // Match the OS caption (title + min/max/close) to the app's own theme, not the
+  // system theme. Updated live when the user changes theme (saveSettings handler).
+  nativeTheme.themeSource = store.settings.theme
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
     minWidth: 900,
     minHeight: 600,
-    backgroundColor: '#0c0e12',
+    backgroundColor: store.settings.theme === 'light' ? '#f4f5f8' : '#0c0e12',
     autoHideMenuBar: true,
     show: false,
     // Dev only: point the window/taskbar icon at the source build asset. In a
@@ -511,6 +510,7 @@ function registerIpc(): void {
   ipcMain.handle(IPC.saveSettings, async (_e, s: Settings) => {
     const saved = await store.saveSettings(s)
     applyNetwork(saved)
+    nativeTheme.themeSource = saved.theme // keep the OS caption in sync with the app theme
     return saved
   })
 
@@ -1077,6 +1077,39 @@ function registerIpc(): void {
     }
     closing = true
     mainWindow?.destroy()
+  })
+  // Full reset: wipe app data (settings/library/session/etc). When
+  // deleteWorkFolders is set, also remove every scanned work's folder from disk.
+  // Relaunches into a clean first-run state.
+  ipcMain.handle(IPC.resetApp, async (_e, deleteWorkFolders: boolean) => {
+    if (deleteWorkFolders) {
+      for (const w of store.works.values()) {
+        try {
+          await fs.rm(w.path, { recursive: true, force: true })
+        } catch {
+          /* keep going — a locked/missing folder shouldn't abort the reset */
+        }
+      }
+    }
+    const ud = app.getPath('userData')
+    const files = [
+      'works.json',
+      'settings.json',
+      'session.json',
+      'online.json',
+      'translationEdits.json',
+      'hitomi-suggest-seen.json'
+    ]
+    for (const f of files) {
+      try {
+        await fs.rm(join(ud, f), { force: true })
+      } catch {
+        /* ignore */
+      }
+    }
+    quitting = true
+    app.relaunch()
+    app.exit(0)
   })
   ipcMain.handle(IPC.parseName, (_e, name: string) => parseName(name, store.settings.hitomiNamePatterns))
 

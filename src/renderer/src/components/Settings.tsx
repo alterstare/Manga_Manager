@@ -116,6 +116,9 @@ export default function Settings(): JSX.Element {
     return () => document.documentElement.setAttribute('data-theme', settings.theme ?? 'light')
   }, [settings.theme])
   const [confirmReset, setConfirmReset] = useState(false)
+  // Full data wipe: two-step confirm; optional work-folder deletion (default off).
+  const [wipeStep, setWipeStep] = useState<0 | 1 | 2>(0)
+  const [wipeFolders, setWipeFolders] = useState(false)
   const [enriching, setEnriching] = useState(false)
   const [enrichProg, setEnrichProg] = useState<{ done: number; total: number } | null>(null)
   const [organizeProg, setOrganizeProg] = useState<{ moved: number; current: string } | null>(null)
@@ -1745,6 +1748,14 @@ export default function Settings(): JSX.Element {
               초기화
             </button>
           </SettingRow>
+          <SettingRow
+            title="완전 초기화 (모든 데이터 삭제)"
+            desc="설정·라이브러리·세션·즐겨찾기·쿠키 등 앱의 모든 데이터를 삭제하고 최초 실행 상태로 되돌립니다. 되돌릴 수 없습니다."
+          >
+            <button className="btn danger" onClick={() => { setWipeFolders(false); setWipeStep(1) }}>
+              완전 초기화
+            </button>
+          </SettingRow>
         </section>
 
         <section data-cat="manage">
@@ -1892,6 +1903,58 @@ export default function Settings(): JSX.Element {
           confirmLabel="초기화"
           onConfirm={resetAll}
           onCancel={() => setConfirmReset(false)}
+        />
+      )}
+      {wipeStep === 1 && (
+        <ConfirmModal
+          icon="⚠"
+          danger
+          title="모든 데이터를 삭제할까요? (1/2)"
+          desc={
+            <>
+              설정·라이브러리·세션·즐겨찾기·쿠키 등 앱의 <b>모든 데이터</b>가 삭제되고 최초 실행 상태로
+              돌아갑니다.
+              <label className="wipe-check">
+                <input
+                  type="checkbox"
+                  checked={wipeFolders}
+                  onChange={(e) => setWipeFolders(e.target.checked)}
+                />
+                작품 저장 폴더까지 디스크에서 삭제 (다운로드한 만화 파일 전부 영구 삭제)
+              </label>
+            </>
+          }
+          confirmLabel="계속"
+          cancelLabel="취소"
+          onConfirm={() => setWipeStep(2)}
+          onCancel={() => setWipeStep(0)}
+        />
+      )}
+      {wipeStep === 2 && (
+        <ConfirmModal
+          icon="🗑"
+          danger
+          title="마지막 확인 (2/2)"
+          desc={
+            <>
+              정말 실행하면 <b>되돌릴 수 없습니다.</b>
+              {wipeFolders ? (
+                <>
+                  {' '}
+                  <b>작품 폴더의 파일까지 영구 삭제</b>되며, 앱이 재시작됩니다.
+                </>
+              ) : (
+                <> 앱 데이터가 삭제되고 재시작됩니다. (작품 파일은 유지)</>
+              )}
+            </>
+          }
+          confirmLabel={wipeFolders ? '전부 삭제하고 재시작' : '초기화하고 재시작'}
+          cancelLabel="취소"
+          onConfirm={() => {
+            setWipeStep(0)
+            window.api.resetApp(wipeFolders)
+          }}
+          onCancel={() => setWipeStep(0)}
         />
       )}
     </div>

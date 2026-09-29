@@ -10,6 +10,7 @@ import type { TokiSeriesRef } from './TokiDownloadModal'
 import TokiBackupModal from './TokiBackupModal'
 import OnlineThumb from './OnlineThumb'
 import { getOnlineImages } from '../images'
+import { SearchIcon, FavoriteIcon, DownloadIcon } from './icons'
 
 const SORTS: [TokiSort, string][] = [
   ['date', '최신순'],
@@ -250,8 +251,8 @@ export default function TokiBrowse(): JSX.Element {
             onKeyDown={(e) => e.key === 'Enter' && run()}
             placeholder={field === 'author' ? '작가 검색 후 Enter' : '제목 검색 후 Enter (비우면 둘러보기)'}
           />
-          <button className="btn primary" onClick={run}>
-            적용
+          <button className="btn primary" onClick={run} title="검색">
+            <SearchIcon />
           </button>
         </div>
 
@@ -273,7 +274,7 @@ export default function TokiBrowse(): JSX.Element {
             title="즐겨찾기"
             onClick={() => setFavMode((v) => !v)}
           >
-            ♥ 즐겨찾기
+            <FavoriteIcon filled className="fav-ico" /> 즐겨찾기
           </button>
           {favMode && (
             <Dropdown<'rank' | 'recent'>
@@ -406,7 +407,7 @@ export default function TokiBrowse(): JSX.Element {
                     toggleOnlineFav(g.url, favMeta(g, artist))
                   }}
                 >
-                  {f?.favorite ? '♥' : '♥'}
+                  <FavoriteIcon filled={!!f?.favorite} />
                 </span>
               </div>
               <div
@@ -439,7 +440,7 @@ export default function TokiBrowse(): JSX.Element {
                   setDlSeries({ url: g.url, title: g.title })
                 }}
               >
-                ⬇ 다운로드
+                <DownloadIcon /> 다운로드
               </button>
             </div>
           )

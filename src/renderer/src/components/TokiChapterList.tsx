@@ -5,6 +5,7 @@ import { getTokiChapters } from '../toki'
 import type { TokiChapter } from '../../../shared/ipc'
 import type { OnlineFav } from '../../../shared/types'
 import Stars from './Stars'
+import { SearchIcon, FavoriteIcon, WidthNormalIcon } from './icons'
 
 // Left list shown while reading a toki chapter: the sibling chapters of the active
 // tab's series. Mirrors the local general-manga left list (LibraryList) so the
@@ -63,7 +64,7 @@ export default function TokiChapterList(): JSX.Element {
           ← 홈
         </button>
         <span className="lib-series-label">
-          📖 시리즈 · {chapters.length}화
+          <WidthNormalIcon /> 시리즈 · {chapters.length}화
         </span>
       </div>
       <div className="lib-search-row">
@@ -74,8 +75,8 @@ export default function TokiChapterList(): JSX.Element {
           onKeyDown={(e) => e.key === 'Enter' && apply()}
           placeholder="검색 후 Enter"
         />
-        <button className="mini" onClick={apply}>
-          검색
+        <button className="mini" onClick={apply} title="검색">
+          <SearchIcon />
         </button>
       </div>
       {applied && (
@@ -127,7 +128,7 @@ export default function TokiChapterList(): JSX.Element {
                     toggleOnlineFav(c.url, chapterMeta(c))
                   }}
                 >
-                  {fav?.favorite ? '♥' : '♥'}
+                  <FavoriteIcon filled={!!fav?.favorite} />
                 </span>
               </div>
             </div>

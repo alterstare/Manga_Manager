@@ -152,7 +152,8 @@ export const IPC = {
   navBack: 'app:navBack', // main -> renderer: mouse/back-command → go back
   navForward: 'app:navForward', // main -> renderer: mouse/forward-command → go forward
   updateStatus: 'update:status', // main -> renderer: auto-update progress/state
-  installUpdate: 'update:install' // renderer -> main: quit and install the downloaded update
+  installUpdate: 'update:install', // renderer -> main: quit and install the downloaded update
+  resetApp: 'app:reset' // renderer -> main: wipe settings/library data (+ optionally work folders), relaunch
 } as const
 
 // Auto-update lifecycle surfaced in the activity bar.
@@ -371,6 +372,9 @@ export interface Api {
   onUpdateStatus: (cb: (s: UpdateStatus) => void) => () => void
   // User clicked "지금 재시작" on the downloaded-update row → quit + install.
   installUpdate: () => void
+  // Wipe all app data (settings/library/session). deleteWorkFolders also removes
+  // every scanned work's folder from disk. Relaunches the app. Never resolves.
+  resetApp: (deleteWorkFolders: boolean) => Promise<void>
   // Cloudflare auth window shown (true) / cleared (false) — show a banner.
   onTokiChallenge: (cb: (active: boolean) => void) => () => void
   // Mouse "back" side button / browser-backward app command → go back.

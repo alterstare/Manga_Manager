@@ -2,8 +2,13 @@
   /* Kraken-inspired light theme. Purple brand on white/cool-gray surfaces. */
   --bg: #f4f5f8; /* page */
   --bg-1: #ffffff; /* primary surface (cards, bars) */
+  --head-bg: rgba(255, 255, 255, 0.9); /* sticky reader header (glass) */
+  --hover-veil: rgba(0, 0, 0, 0.06); /* uniform hover lift over any bg (light) */
+  --press-veil: rgba(0, 0, 0, 0.13); /* stronger veil on click (light) */
   --bg-2: #f0f1f5; /* subtle raised / hover */
   --bg-3: #e7e9f0; /* deeper fill / thumbnails */
+  --tab-active: #e2e4ea; /* active tab fill — darker/emphasized (light) */
+  --tab-inactive: #ffffff; /* inactive tab fill — bright (light) */
   --line: #dedee5; /* divider borders */
   --text: #101114; /* near black */
   --text-dim: #686b82; /* cool gray secondary text */
@@ -36,8 +41,13 @@
 :root[data-theme='dark'] {
   --bg: #0b0d13;
   --bg-1: #14161d;
+  --head-bg: rgba(12, 14, 18, 0.92); /* sticky reader header (glass) */
+  --hover-veil: rgba(255, 255, 255, 0.09); /* uniform hover lift over any bg (dark) */
+  --press-veil: rgba(255, 255, 255, 0.18); /* stronger veil on click (dark) */
   --bg-2: #1b1e27;
   --bg-3: #262a35;
+  --tab-active: #333a49; /* active tab fill — clearly lighter than the bar (dark) */
+  --tab-inactive: #0f1117; /* inactive tab fill — recessed vs active (dark) */
   --line: #2b3040;
   --text: #eceef4;
   --text-dim: #9aa0b2;
@@ -111,7 +121,10 @@ img {
 .tab-strip {
   display: flex;
   gap: 3px;
-  overflow-x: auto;
+  /* visible (not auto) so an active/pressed tab's shadow isn't clipped at the
+     strip edges by the neighbouring nav buttons. Tabs shrink to fit; drag is
+     clamped to the strip in JS so nothing spills over the nav buttons. */
+  overflow: visible;
   flex: 1;
   min-width: 0;
   scrollbar-width: none;
@@ -161,23 +174,37 @@ img {
   width: 40px;
   padding: 0;
 }
-.tab:hover {
-  background: var(--bg-3);
-  color: var(--text);
+/* Nav buttons use the SAME uniform veil as content tabs on hover, so an active
+   button (its own fill) and an inactive one get the identical brightness lift. */
+.tabbar > .tab:hover {
+  box-shadow: inset 0 0 0 999px var(--hover-veil);
 }
 .tab.active {
   background: var(--bg);
   color: var(--text);
   border-color: var(--line);
 }
-.home-tab {
-  font-weight: 700;
-  background: var(--accent-2);
-  color: #fff;
+/* Nav buttons: inactive keeps the subtle raised button fill (bg-2, slightly off
+   the bar); active uses the emphasized tab fill for a clear brightness difference. */
+.menu-btn,
+.home-tab,
+.icon-tab {
+  background: var(--bg-2);
 }
-.home-tab.active {
-  background: var(--accent-2);
-  color: #fff;
+.home-tab.active,
+.icon-tab.active {
+  background: var(--tab-active);
+  border-color: transparent;
+}
+/* Press feedback: a subtle shadow only WHILE clicking (:active). Top-weighted so
+   it reads as a small lift inside the tab bar — no shadow spilling below. */
+.menu-btn,
+.home-tab,
+.icon-tab {
+  transition: box-shadow 0.1s ease;
+}
+.tabbar > .tab:active {
+  box-shadow: inset 0 0 0 999px var(--press-veil);
 }
 .tab-title {
   overflow: hidden;
@@ -205,10 +232,11 @@ img {
   box-sizing: border-box;
   display: grid;
   place-items: center;
-  font-size: 15px;
+  font-size: 14px; /* drives the CloseIcon size (1.15em) */
   line-height: 1;
-  /* The × glyph sits low in its box; nudge it up so it centers in the hover circle. */
-  padding-bottom: 2px;
+}
+.tab-close .micon {
+  vertical-align: 0; /* grid-centered; no baseline nudge needed */
 }
 .tab-close:hover {
   background: rgba(0, 0, 0, 0.06);
@@ -1034,7 +1062,7 @@ select {
   align-items: center;
   gap: 14px;
   padding: 12px 20px;
-  background: rgba(12, 14, 18, 0.92);
+  background: var(--head-bg);
   backdrop-filter: blur(6px);
   border-bottom: 1px solid var(--line);
 }
@@ -2830,6 +2858,46 @@ body.resizing {
   display: inline-block;
   flex: 0 0 auto;
 }
+/* Global click feedback: a brightness veil on press for every button/clickable —
+   same mechanism as the tabs, no shadow or lift. Overlays currentColor bg so it
+   works on any surface (opaque or transparent). */
+button:active,
+.btn:active,
+.mini:active,
+.chip:active,
+.seg-heart:active,
+.seg-dl:active,
+.grp-btn:active,
+.list-toggle:active,
+.tab-close:active,
+.fav-caret:active,
+.export-opt:active,
+.dropdown-opt:active,
+.menu-item:active,
+.menu-mode:active,
+.menu-close:active {
+  box-shadow: inset 0 0 0 999px var(--press-veil);
+}
+
+/* Material Symbol icons: fill currentColor, size to text, baseline-aligned. */
+.micon {
+  width: 1.15em;
+  height: 1.15em;
+  display: inline-block;
+  flex: 0 0 auto;
+  vertical-align: -0.15em;
+}
+/* Favorite heart runs a touch smaller than other icons — it reads heavier. */
+.fav-heart {
+  width: 0.9em;
+  height: 0.9em;
+}
+/* Filled favorite heart in the "즐겨찾기" filter chips → always red, with a gap
+   before the label so the icon and text aren't cramped. */
+.fav-ico {
+  color: var(--danger);
+  margin-right: 5px;
+}
 .seg .grp-btn:hover,
 .seg .grp-btn.on {
   color: var(--accent);
@@ -3022,6 +3090,24 @@ body.resizing {
 /* Auto-update row: tinted so it stands out from download/scan rows. */
 .activity-row.update {
   background: var(--accent-soft);
+}
+/* Work-folder delete opt-in inside the full-reset confirm modal. */
+.wipe-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--danger, #e5484d);
+  border-radius: var(--r4);
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+}
+.wipe-check input {
+  margin-top: 2px;
+  flex-shrink: 0;
 }
 .activity-row-icon {
   font-size: 16px;
@@ -3565,7 +3651,8 @@ body.resizing {
   position: relative;
   z-index: 10;
   cursor: grabbing;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+  /* Top-weighted so the lift shadow stays inside the tab bar (no bottom spill). */
+  box-shadow: 0 -2px 8px -1px rgba(0, 0, 0, 0.4);
 }
 
 /* Virtualized reader page wrapper (measured for the spacer model). */
@@ -4581,14 +4668,16 @@ select:focus,
 
 /* ---- Chrome-style tab strip: no per-tab boxes; separators + active flare ---- */
 .tab-strip .tab {
-  background: transparent;
+  background: var(--tab-inactive);
   border-color: transparent;
   /* Let the separator + active flare (::before/::after just outside the tab) show;
      the title itself is still clipped by .tab-title. */
   overflow: visible;
 }
-.tab-strip .tab:hover:not(.active) {
-  background: var(--bg-2);
+/* Uniform hover feedback for EVERY tab (active or not) — one rule, no exception.
+   The inset veil lifts brightness over whatever bg the tab currently has. */
+.tab-strip .tab:hover {
+  box-shadow: inset 0 0 0 999px var(--hover-veil);
 }
 /* Short vertical separator between inactive tabs (hidden by an active/hover neighbor). */
 .tab-strip .tab:not(.active)::after {
@@ -4612,7 +4701,7 @@ select:focus,
 /* Active tab: bright fill that reads as continuous with the content below, rounded
    top, and bottom corners that flare OUTWARD into the content (Chrome look). */
 .tab-strip .tab.active {
-  background: var(--bg);
+  background: var(--tab-active);
   color: var(--text);
   border-color: transparent;
   z-index: 2;
@@ -4624,7 +4713,7 @@ select:focus,
   bottom: 0;
   width: 9px;
   height: 9px;
-  background: var(--bg);
+  background: var(--tab-active);
   display: block;
   right: auto;
   top: auto;

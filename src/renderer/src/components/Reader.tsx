@@ -9,15 +9,22 @@ import type { FitMode } from '../../../shared/types'
 import { filterExcluded, getExcluded, hasExclusions } from '../exclude'
 import { langCategory } from '../../../shared/lang'
 import TranslatedImage from './TranslatedImage'
+import { DownloadIcon, ArrowRangeIcon, HeightIcon, FullscreenIcon, FullscreenExitIcon } from './icons'
 
 const counted = new Set<string>()
 
 // Fit modes: how a page is sized in the pane. The bottom button cycles them.
-const FIT_LABEL: Record<FitMode, string> = {
-  width: '↔ 폭 맞춤',
-  height: '↕ 길이 맞춤',
-  contain: '⊡ 화면 맞춤',
-  cover: '⛶ 화면 채움'
+const FIT_TEXT: Record<FitMode, string> = {
+  width: '폭 맞춤',
+  height: '길이 맞춤',
+  contain: '화면 맞춤',
+  cover: '화면 채움'
+}
+const FIT_ICON: Record<FitMode, JSX.Element> = {
+  width: <ArrowRangeIcon />,
+  height: <HeightIcon />,
+  contain: <FullscreenExitIcon />,
+  cover: <FullscreenIcon />
 }
 const FIT_ORDER: FitMode[] = ['contain', 'width', 'height', 'cover']
 
@@ -769,7 +776,7 @@ export default function Reader({
             onClick={download}
             disabled={downloading || dlDone}
           >
-            {downloading ? '다운로드 중…' : dlDone ? '✓ 완료' : '⬇ 다운로드'}
+            {downloading ? '다운로드 중…' : dlDone ? '✓ 완료' : <><DownloadIcon /> 다운로드</>}
           </button>
         ) : online && online.kind === 'toki' && online.seriesUrl ? (
           <button
@@ -778,7 +785,7 @@ export default function Reader({
             disabled={downloading || dlDone}
             title="다운로드"
           >
-            {downloading ? '다운로드 중…' : dlDone ? '✓ 완료' : '⬇ 전체 다운로드'}
+            {downloading ? '다운로드 중…' : dlDone ? '✓ 완료' : <><DownloadIcon /> 전체 다운로드</>}
           </button>
         ) : (
           work && (
@@ -945,7 +952,7 @@ export default function Reader({
             className="mini zoom-btn"
             onClick={onZoomButton}
           >
-            {atFit ? FIT_LABEL[fit] : `${Math.round(zoom * 100)}%`}
+            {atFit ? <>{FIT_ICON[fit]} {FIT_TEXT[fit]}</> : `${Math.round(zoom * 100)}%`}
           </button>
           {canTranslate && (
             <button

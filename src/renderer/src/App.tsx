@@ -24,6 +24,8 @@ import { setExcluded } from './exclude'
 export default function App(): JSX.Element {
   const view = useStore((s) => s.view)
   const libraryMode = useStore((s) => s.libraryMode)
+  const needDownloadDir = useStore((s) => s.needDownloadDir)
+  const setNeedDownloadDir = useStore((s) => s.setNeedDownloadDir)
   const activeTabId = useStore((s) => s.activeTabId)
   const manageMode = useStore((s) => s.manageMode)
   // Online browse position — recorded into nav history so back steps through
@@ -249,6 +251,24 @@ export default function App(): JSX.Element {
             useStore.getState().goSettings()
           }}
           onCancel={() => setAskAddr(false)}
+        />
+      )}
+      {needDownloadDir && (
+        <ConfirmModal
+          icon="📁"
+          title="저장 폴더가 없습니다"
+          desc={
+            libraryMode === 'normal'
+              ? '다운로드를 저장하려면 설정 → 일반 만화에서 다운로드 폴더(또는 라이브러리 폴더)를 먼저 지정하세요.'
+              : '다운로드를 저장하려면 설정 → 폴더에서 다운로드 폴더(또는 라이브러리 폴더)를 먼저 지정하세요.'
+          }
+          confirmLabel="설정 열기"
+          cancelLabel="나중에"
+          onConfirm={() => {
+            setNeedDownloadDir(false)
+            useStore.getState().goSettings()
+          }}
+          onCancel={() => setNeedDownloadDir(false)}
         />
       )}
     </div>

@@ -225,6 +225,8 @@ interface AppState {
   update: UpdateStatus | null // auto-update state, shown as a row in the activity bar
   setUpdate: (s: UpdateStatus) => void
   installUpdate: () => void // quit + install the downloaded update
+  needDownloadDir: boolean // download attempted with no destination folder → prompt
+  setNeedDownloadDir: (v: boolean) => void
 
   // Job helpers + the tasks that run through them (kept in the store so they
   // survive view switches — progress + completion show in the global activity bar).
@@ -573,6 +575,7 @@ export const useStore = create<AppState>((set, get) => ({
   jobs: [],
   activityOpen: false,
   update: null,
+  needDownloadDir: false,
 
   setWorks: (works) => set({ works }),
   upsertWork: (w) => set((st) => ({ works: st.works.map((x) => (x.id === w.id ? w : x)) })),
@@ -1316,6 +1319,17 @@ export const useStore = create<AppState>((set, get) => ({
       return { downloads }
     }),
   startDownload: async (spec) => {
+    // No destination folder configured → surface a styled prompt (with a jump to
+    // settings) instead of letting the download fail with a raw alert.
+    const s = get().settings
+    const destReady =
+      spec.kind === 'hitomi'
+        ? !!(s.downloadDir || s.libraryRoots[0])
+        : !!(s.normalDownloadDir || s.normalFavoritesDir || s.normalRoots?.[0])
+    if (!destReady) {
+      set({ needDownloadDir: true })
+      return null
+    }
     const code = specCode(spec)
     // Seed/refresh the list entry immediately so it shows as 대기 중 and carries
     // the spec for later stop/retry. Progress events then drive the phase.
@@ -1402,6 +1416,7 @@ export const useStore = create<AppState>((set, get) => ({
     set((st) => ({ activityOpen: open === undefined ? !st.activityOpen : open })),
   setUpdate: (s) => set({ update: s }),
   installUpdate: () => window.api.installUpdate(),
+  setNeedDownloadDir: (v) => set({ needDownloadDir: v }),
   clearDoneJobs: () =>
     set((st) => ({
       jobs: st.jobs.filter((j) => j.status === 'running'),

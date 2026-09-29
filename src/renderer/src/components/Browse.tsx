@@ -13,7 +13,7 @@ import Stars from './Stars'
 import { favMeta, tagTokens, tagToken, tokenLabel, FAV_BASE } from '../util'
 import Caret from './Caret'
 import Dropdown from './Dropdown'
-import { CheckIcon, PauseIcon, PlayIcon } from './icons'
+import { CheckIcon, PauseIcon, PlayIcon, SearchIcon, SyncIcon, GridIcon, MenuIcon, FavoriteIcon, DownloadIcon } from './icons'
 import type { OnlineGallery } from '../store'
 
 const LANGS = [
@@ -96,6 +96,16 @@ export default function Browse(): JSX.Element {
   const [menu, setMenu] = useState<{ x: number; y: number; g: OnlineGallery } | null>(null)
   const [crossMenu, setCrossMenu] = useState<{ x: number; y: number; query: string; raw: string } | null>(null)
 
+  // Descending sort must reverse the WHOLE list, not just the visible page, so
+  // page N (user-facing) maps to the mirrored source page (lastPage - N) and its
+  // items are reversed. Only for the online browse (favorites paginate locally).
+  // total is 0 until the first fetch; then fetchPage recomputes and self-corrects.
+  const lastSrcPage = Math.max(0, Math.ceil(total / pageSize) - 1)
+  const fetchPage = !favMode && reverse && total > 0 ? Math.max(0, lastSrcPage - page) : page
+  // Reset the known total when the source changes so the reverse page-mirror
+  // doesn't briefly use the previous source's page count.
+  useEffect(() => setTotal(0), [activeSource])
+
   // The browse view is kept mounted (hidden) once first opened, so this effect
   // only re-runs on an actual source/page change or a forced reload (🌐 double-
   // press / reloadKey) — returning to the view does NOT refetch.
@@ -105,7 +115,7 @@ export default function Browse(): JSX.Element {
     setError(null)
     setItems([]) // drop the previous page so it doesn't linger under the loader
     window.api
-      .hitomiList(activeSource, page)
+      .hitomiList(activeSource, fetchPage)
       .then((r) => {
         if (!alive) return
         setItems(r.items)
@@ -116,7 +126,7 @@ export default function Browse(): JSX.Element {
     return () => {
       alive = false
     }
-  }, [activeSource, page, reloadKey])
+  }, [activeSource, fetchPage, reloadKey])
 
   // Comma-separated tokens so multi-word tags (e.g. "female:sole female") survive.
   // A lone multi-word token (no comma to separate it) is quoted so the backend
@@ -308,15 +318,15 @@ export default function Browse(): JSX.Element {
             }}
             placeholder="제목, 코드, 태그, artist:작가명 / tag:태그명 으로 검색 후 Enter"
           />
-          <button className="btn primary" onClick={() => runSearch()}>
-            검색
+          <button className="btn primary" onClick={() => runSearch()} title="검색">
+            <SearchIcon />
           </button>
           <button
             className="btn"
             title="랜덤 페이지"
             onClick={() => lastPage > 0 && setBrowsePage(Math.floor(Math.random() * (lastPage + 1)))}
           >
-            🎲
+            <SyncIcon />
           </button>
         </div>
 
@@ -326,18 +336,7 @@ export default function Browse(): JSX.Element {
             onClick={() => setBrowseLayout((l) => (l === 'grid' ? 'list' : 'grid'))}
             title={browseLayout === 'grid' ? '격자형' : '목록형'}
           >
-            {browseLayout === 'grid' ? (
-              <span className="ic-grid" aria-hidden>
-                <i />
-                <i />
-                <i />
-                <i />
-              </span>
-            ) : (
-              <span className="ic-menu" aria-hidden>
-                ☰
-              </span>
-            )}
+            {browseLayout === 'grid' ? <GridIcon /> : <MenuIcon />}
           </button>
           <button
             className="chip layout-toggle"
@@ -365,7 +364,7 @@ export default function Browse(): JSX.Element {
                 }}
                 title="즐겨찾기"
               >
-                ♥ 즐겨찾기
+                <FavoriteIcon filled className="fav-ico" /> 즐겨찾기
               </span>
               <span className="fav-caret" onClick={() => setFavPanel((v) => !v)} title="즐겨찾기 목록">
                 <span className={`dt ${favPanel ? 'up' : ''}`} />
@@ -491,7 +490,7 @@ export default function Browse(): JSX.Element {
                   title="즐겨찾기"
                   onClick={() => toggleOnlineFav(g.code, favMeta(g))}
                 >
-                  ♥
+                  <FavoriteIcon filled={!!f?.favorite} />
                 </span>
                 <span
                   className={`seg-dl ${have ? 'ok' : ''} ${dlErr ? 'err' : ''} ${dlPaused ? 'paused' : ''}`}
@@ -519,9 +518,9 @@ export default function Browse(): JSX.Element {
                   ) : have ? (
                     <CheckIcon />
                   ) : dlErr ? (
-                    '↻'
+                    <SyncIcon />
                   ) : (
-                    '⬇'
+                    <DownloadIcon />
                   )}
                 </span>
               </span>
