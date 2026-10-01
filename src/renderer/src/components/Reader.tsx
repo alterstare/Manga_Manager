@@ -1,6 +1,15 @@
+// One reader pane (a tab, or one side of a split tab) for a local work or an
+// online gallery/chapter. Three modes:
+//   scroll — virtualized vertical strip (only a window of pages is mounted;
+//            spacers use measured / estimated page heights)
+//   paged  — one page, click/keys/wheel to flip
+//   spread — two pages side by side
+// plus fit modes and Ctrl+wheel zoom (anchored at the cursor), page
+// translation overlay, chapter navigation (general manga, local + toki) and
+// continuous reading into the next/previous work of the left list.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { JSX } from 'react'
-import { useStore } from '../store'
+import { useStore, useSeriesRoots } from '../store'
 import { getImages, getOnlineImages } from '../images'
 import { getTokiChapters } from '../toki'
 import { analyzeSeries, seriesOf, splitArtists } from '../util'
@@ -9,127 +18,14 @@ import type { FitMode } from '../../../shared/types'
 import { filterExcluded, getExcluded, hasExclusions } from '../exclude'
 import { langCategory } from '../../../shared/lang'
 import TranslatedImage from './TranslatedImage'
-import { DownloadIcon, ArrowRangeIcon, HeightIcon, FullscreenIcon, FullscreenExitIcon } from './icons'
+import { DownloadIcon } from './icons'
+import { FIT_TEXT, FIT_ICON, FIT_ORDER, SCROLL_FIT_ORDER, fitStyle, fitHeight } from './reader/fit'
+import { prefetchOrdered } from './reader/prefetch'
+import PageSlot from './reader/PageSlot'
 
+// (tab, pane, work) combos whose view was already counted this session, so a
+// re-render / remount of the same open work doesn't bump viewCount again.
 const counted = new Set<string>()
-
-// Fit modes: how a page is sized in the pane. The bottom button cycles them.
-const FIT_TEXT: Record<FitMode, string> = {
-  width: '폭 맞춤',
-  height: '길이 맞춤',
-  contain: '화면 맞춤',
-  cover: '화면 채움'
-}
-const FIT_ICON: Record<FitMode, JSX.Element> = {
-  width: <ArrowRangeIcon />,
-  height: <HeightIcon />,
-  contain: <FullscreenExitIcon />,
-  cover: <FullscreenIcon />
-}
-const FIT_ORDER: FitMode[] = ['contain', 'width', 'height', 'cover']
-// Scroll mode: only width/height fit — contain ≈ height fit there, and cover just
-// crops pages that width fit already shows whole.
-const SCROLL_FIT_ORDER: FitMode[] = ['width', 'height']
-
-// <img> style for a fit mode given the (zoom-scaled) pane box. `sw`/`sh` are the
-// available width/height in px. width/height fit one axis; contain fits inside
-// the box (letterbox); cover fills it (cropping the overflow).
-function fitStyle(fit: FitMode, sw: number, sh: number): React.CSSProperties {
-  switch (fit) {
-    case 'width':
-      return { width: sw, height: 'auto', maxWidth: 'none', maxHeight: 'none' }
-    case 'height':
-      return { height: sh, width: 'auto', maxWidth: 'none', maxHeight: 'none' }
-    case 'cover':
-      return { width: sw, height: sh, objectFit: 'cover' }
-    default:
-      return { maxWidth: sw, maxHeight: sh, width: 'auto', height: 'auto' }
-  }
-}
-
-// Displayed page height for the virtualizer, from the decoded aspect ratio
-// r = naturalHeight / naturalWidth and the fit mode.
-function fitHeight(fit: FitMode, r: number, sw: number, sh: number): number {
-  switch (fit) {
-    case 'width':
-      return sw * r
-    case 'height':
-    case 'cover':
-      return sh
-    default:
-      return Math.min(sh, sw * r)
-  }
-}
-
-// Decode `order` (indexes into `srcs`) off-DOM with at most `concurrency`
-// decodes in flight, so the FIRST pages finish fast instead of competing with
-// the whole list (fixes the long "load everything up front" stall). Pages paint
-// from the warm decode cache the instant their <img> mounts (no black frame).
-// `onDims` reports each decoded natural size for height estimation; refs are
-// pushed into `sink` so decoded bytes aren't GC'd before display. Returns a
-// cancel fn.
-function prefetchOrdered(
-  srcs: string[],
-  order: number[],
-  concurrency: number,
-  sink: HTMLImageElement[],
-  onDims: (i: number, w: number, h: number) => void
-): () => void {
-  let cancelled = false
-  let next = 0
-  const step = (): void => {
-    if (cancelled) return
-    const k = next++
-    if (k >= order.length) return
-    const i = order[k]
-    const im = new Image()
-    im.decoding = 'async'
-    im.src = srcs[i]
-    sink.push(im)
-    const after = (): void => {
-      if (cancelled) return
-      if (im.naturalWidth > 0) onDims(i, im.naturalWidth, im.naturalHeight)
-      step() // pull the next page only when this one is done → bounded pressure
-    }
-    const p = im.decode?.()
-    if (p) p.then(after, after)
-    else {
-      im.onload = after
-      im.onerror = after
-    }
-  }
-  for (let c = 0; c < Math.min(concurrency, order.length); c++) step()
-  return () => {
-    cancelled = true
-  }
-}
-
-// Wraps one rendered page and reports its measured height to the virtualizer.
-function PageSlot({
-  index,
-  onMeasure,
-  children
-}: {
-  index: number
-  onMeasure: (i: number, h: number) => void
-  children: React.ReactNode
-}): JSX.Element {
-  const ref = useRef<HTMLDivElement>(null)
-  useLayoutEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const report = (): void => onMeasure(index, el.offsetHeight)
-    report()
-    const ro = new ResizeObserver(report)
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [index, onMeasure])
-  return (
-    <div ref={ref} className="page-slot">
-      {children}
-    </div>
-  )
-}
 
 export default function Reader({
   tabId,
@@ -194,8 +90,7 @@ export default function Reader({
   const reloadNonce = useStore((s) => s.reloadNonce)
   const pageGap = useStore((s) => s.settings.readerPageGap)
   const works = useStore((s) => s.works)
-  const normalRootsSetting = useStore((s) => s.settings.normalRoots)
-  const normalFav = useStore((s) => s.settings.normalFavoritesDir)
+  const seriesRootList = useSeriesRoots()
   const chapterScheme = useStore((s) => s.settings.normalChapterScheme)
   const replaceTabWork = useStore((s) => s.replaceTabWork)
   const replaceTabOnline = useStore((s) => s.replaceTabOnline)
@@ -250,10 +145,10 @@ export default function Reader({
   const isNormalWork = !!work && (work.library ?? 'hitomi') === 'normal'
   const chapters = useMemo(() => {
     if (!isNormalWork || !work) return []
-    const roots = [...(normalRootsSetting ?? []), normalFav].filter(Boolean) as string[]
+    const roots = seriesRootList
     const group = seriesOf(work, works, roots)
     return analyzeSeries(group.chapters, group.title, chapterScheme).map((ci) => ci.work)
-  }, [isNormalWork, work, works, normalRootsSetting, normalFav, chapterScheme])
+  }, [isNormalWork, work, works, seriesRootList, chapterScheme])
   const chIdx = work ? chapters.findIndex((c) => c.id === work.id) : -1
   const goChapter = (delta: number): void => {
     const n = chapters[chIdx + delta]
@@ -454,6 +349,7 @@ export default function Reader({
     }
   }, [online, work?.id, readingQueue])
 
+  // Count a view (조회수 / 최근 본) once per opening of a local work.
   useEffect(() => {
     if (!tab || !work || online) return
     const ck = `${tabId}:${side}:${work.id}`

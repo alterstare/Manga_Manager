@@ -1,19 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { JSX } from 'react'
-import { useStore } from '../store'
+import { useStore, useSeriesRoots } from '../store'
 import type { TokiListSource, TokiSummary, TokiSort, TokiType } from '../../../shared/ipc'
 import type { OnlineFav } from '../../../shared/types'
 import Stars from './Stars'
-import Dropdown from './Dropdown'
 import TokiDownloadModal from './TokiDownloadModal'
 import type { TokiSeriesRef } from './TokiDownloadModal'
 import TokiBackupModal from './TokiBackupModal'
 import OnlineThumb from './OnlineThumb'
 import { getOnlineImages } from '../images'
-import { SearchIcon, FavoriteIcon, DownloadIcon, LanguageIcon } from './icons'
-import FavDlToggle from './FavDlToggle'
+import { SearchIcon, FavoriteIcon, DownloadIcon } from './icons'
+import { OnlineOnlyToggle, FavSortSelect } from './FavDlToggle'
 import Pager from './Pager'
-import { groupSeries, titleKey } from '../util'
+import { groupSeries, titleKey, isTokiCode } from '../util'
 
 const SORTS: [TokiSort, string][] = [
   ['date', '최신순'],
@@ -44,11 +43,9 @@ export default function TokiBrowse(): JSX.Element {
   const onlineFavs = useStore((s) => s.onlineFavs)
   const toggleNormalUnifiedFav = useStore((s) => s.toggleNormalUnifiedFav)
   const favOnlineOnly = useStore((s) => s.favOnlineOnly)
-  const setFavOnlineOnly = useStore((s) => s.setFavOnlineOnly)
   const works = useStore((s) => s.works)
   const openTab = useStore((s) => s.openTab)
-  const normalRootsSetting = useStore((s) => s.settings.normalRoots)
-  const normalFavDir = useStore((s) => s.settings.normalFavoritesDir)
+  const roots = useSeriesRoots()
   const normalFavSeries = useStore((s) => s.settings.normalFavSeries)
   const setOnlineRank = useStore((s) => s.setOnlineRank)
   const authorSeed = useStore((s) => s.tokiAuthorSeed)
@@ -185,7 +182,6 @@ export default function TokiBrowse(): JSX.Element {
   // Local general-manga series (downloaded), keyed by normalized title — links a
   // local series with its online toki counterpart (they share only the title).
   const localSeries = useMemo(() => {
-    const roots = [...(normalRootsSetting ?? []), normalFavDir].filter(Boolean) as string[]
     const m = new Map<string, { key: string; title: string; repId: string; artist: string | null }>()
     for (const g of groupSeries(works.filter((w) => (w.library ?? 'hitomi') === 'normal'), roots)) {
       const k = titleKey(g.title)
@@ -193,7 +189,7 @@ export default function TokiBrowse(): JSX.Element {
         m.set(k, { key: g.key, title: g.title, repId: g.chapters[0]?.id ?? '', artist: g.chapters.find((c) => c.artist)?.artist ?? null })
     }
     return m
-  }, [works, normalRootsSetting, normalFavDir])
+  }, [works, roots])
   // Title keys favorited locally (series hearts in the library).
   const localFavKeys = useMemo(() => {
     const set = new Set<string>()
@@ -210,7 +206,7 @@ export default function TokiBrowse(): JSX.Element {
     const rows: { g: TokiSummary; t: number; r: number }[] = []
     const seen = new Set<string>()
     for (const f of Object.values(onlineFavs)) {
-      if (!f.favorite || !/^https?:/.test(f.code)) continue
+      if (!f.favorite || !isTokiCode(f.code)) continue
       seen.add(titleKey(f.title))
       rows.push({ g: { url: f.code, title: f.title, thumb: f.thumbUrl, artist: f.artist, genre: null, chapter: null }, t: f.addedAt, r: f.rank })
     }
@@ -230,7 +226,8 @@ export default function TokiBrowse(): JSX.Element {
   // "온라인만" toggle hides the local-only entries.
   const gallery = favMode
     ? favOnlineOnly
-      ? favGalleries.filter((g) => !g.url.startsWith('local:'))
+      ? // not downloaded yet: drop library-only entries and series already in the library
+        favGalleries.filter((g) => !g.url.startsWith('local:') && !localSeries.has(titleKey(g.title)))
       : favGalleries
     : items
 
@@ -337,26 +334,8 @@ export default function TokiBrowse(): JSX.Element {
           >
             <FavoriteIcon filled className="fav-ico" /> 즐겨찾기 {favGalleries.length}
           </button>
-          {favMode && (
-            <FavDlToggle
-              checked={favOnlineOnly}
-              onChange={setFavOnlineOnly}
-              icon={<LanguageIcon />}
-              onTitle="온라인 즐겨찾기만 보는 중"
-              offTitle="모든 즐겨찾기 보는 중"
-            />
-          )}
-          {favMode && (
-            <Dropdown<'rank' | 'recent'>
-              className="field sm"
-              value={favSort}
-              onChange={setFavSort}
-              options={[
-                ['rank', '평점 높은순'],
-                ['recent', '최근 추가순']
-              ]}
-            />
-          )}
+          {favMode && <OnlineOnlyToggle />}
+          {favMode && <FavSortSelect value={favSort} onChange={setFavSort} />}
           <button
             className="chip"
             onClick={() => window.api.tokiOpenSite()}

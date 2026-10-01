@@ -28,7 +28,6 @@ export function effectiveRoots(settings: Settings): string[] {
 export function normalRoots(settings: Settings): string[] {
   const roots = new Set<string>()
   for (const r of settings.normalRoots ?? []) if (r) roots.add(r)
-  if (settings.normalFavoritesDir) roots.add(settings.normalFavoritesDir)
   if (settings.normalDownloadDir) roots.add(settings.normalDownloadDir)
   return [...roots]
 }
@@ -299,8 +298,9 @@ async function makeWork(
     pageCount,
     tags,
     manualTags: [],
-    // Infer favorite / group membership from the folder location so works the
-    // user moved by hand are recognized on a rescan (feature 8).
+    // Location signals, resolved by Store.reconcile: favorite=true here means
+    // "found inside the favorites folder" (the heart itself comes from the
+    // favorites list — see favoriteSync.ts); groups follow group folders.
     favorite: underFavorites(dir, settings, library),
     groups: groupFolderMatch(dir, settings, library),
     homePath: null,
@@ -320,8 +320,9 @@ function safeName(name: string): string {
   return name.replace(/[\\/:*?"<>|]/g, '_').replace(/\s+$/g, '').trim() || 'group'
 }
 
+// Inside the hitomi favorites folder? (General manga has no favorites folder.)
 function underFavorites(dir: string, settings: Settings, library: 'hitomi' | 'normal'): boolean {
-  const favDir = library === 'normal' ? settings.normalFavoritesDir : settings.favoritesDir
+  const favDir = library === 'normal' ? null : settings.favoritesDir
   if (!favDir) return false
   const fav = resolve(favDir)
   const d = resolve(dir)

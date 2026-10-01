@@ -4,8 +4,8 @@ import { langCategory } from '../../shared/lang'
 import type { Filter } from './store'
 
 export function allTags(w: Work): string[] {
-  // favlist:<name> is an internal marker; language: is shown in the meta row, not
-  // as a tag — drop both from the tag list.
+  // language: is shown in the meta row, not as a tag; favlist:<name> is a
+  // legacy list marker (converted to code lists by migrateFavorites) — hide both.
   return [...new Set([...w.tags, ...w.manualTags])].filter(
     (t) => !t.startsWith('favlist:') && !t.startsWith('language:')
   )
@@ -136,27 +136,15 @@ function matchesFilter(w: Work, f: Filter): boolean {
     case 'tag':
       return allTags(w).some((t) => t.toLowerCase() === f.value.toLowerCase())
     case 'favlists':
-      return f.value.some((name) => matchesFavList(w, name))
+      // Checked lists: 기본 = hearted works; imported lists = their codes.
+      return (f.value.includes(FAV_BASE) && w.favorite) || (!!w.code && f.codes.includes(w.code))
   }
 }
 
 // Sentinel list name for the app's own favorites in the drawer.
+// The "기본" entry of the favorites drawer = the hearts themselves (as
+// opposed to an imported favorite list).
 export const FAV_BASE = '기본'
-
-// Does a work belong to the favorite list `name`? '기본' = app-made favorites
-// (favorite, not part of an imported list); others = an imported favlist:<name>.
-export function matchesFavList(w: Work, name: string): boolean {
-  const mt = w.manualTags ?? []
-  const hasList = mt.some((t) => t.startsWith('favlist:'))
-  return name === FAV_BASE ? w.favorite && !hasList : mt.includes(`favlist:${name}`)
-}
-
-// Names of the imported favorite lists present across the works (favlist:<name>).
-export function favListNames(works: Work[]): string[] {
-  const s = new Set<string>()
-  for (const w of works) for (const t of w.manualTags ?? []) if (t.startsWith('favlist:')) s.add(t.slice(8))
-  return [...s].sort((a, b) => a.localeCompare(b))
-}
 
 // Strip grouped tag blocks so "[Group] Title" / "【작가】제목" sort under the
 // real title. Covers ASCII and CJK/fullwidth bracket pairs.
@@ -448,6 +436,15 @@ export function analyzeSeries(chapters: Work[], seriesTitle: string, scheme: Cha
   return info
 }
 
+// Roots handed to groupSeries / seriesOf: the general-manga library roots.
+// Chapters sitting DIRECTLY under one of these are clustered by title prefix
+// (layout 2 below); anything deeper groups by its parent folder. Every caller
+// must use this same list — series keys (used for favorites/tags) and the
+// thumbnail target ids depend on it.
+export function seriesRoots(s: { normalRoots?: string[] | null }): string[] {
+  return (s.normalRoots ?? []).filter(Boolean)
+}
+
 // Collapse normal works into one entry per series. Two folder layouts:
 //  (1) parent folder = series (chapters are subfolders) → one group per parent;
 //  (2) chapters sit directly under a root → cluster by common series prefix, so
@@ -554,4 +551,53 @@ export function titleKey(s: string): string {
     .replace(/[[(【<{（][^\][)】>}）]*[\])】>}）]/g, ' ')
     .replace(/[\s_~～〜·・|/\:\-!?.,'"]+/g, '')
     .trim()
+}
+
+// Online favorites live in one map keyed by "code": a numeric gallery id for
+// hitomi, the series URL for toki (general manga). This tells them apart.
+export function isTokiCode(code: string): boolean {
+  return /^https?:/.test(code)
+}
+
+// Is a general-manga series with this title favorited ONLINE (toki)? Local and
+// online series share only their title, so this is how a local series card
+// shows a heart set from the online side.
+export function isOnlineTitleFav(onlineFavs: Record<string, OnlineFav>, title: string): boolean {
+  const k = titleKey(title)
+  return !!k && Object.values(onlineFavs).some((f) => f.favorite && isTokiCode(f.code) && titleKey(f.title) === k)
+}
+
+// Order general-manga series for the home list. A series takes its chapters'
+// aggregate: newest mtime (recent), last viewed (viewed), summed views (views),
+// best rank (rank), first artist found (artist). random / popular keep the
+// incoming order. `dir` 'asc' reverses the default (descending) order — artist
+// sorting always keeps series without an artist at the end.
+export function sortSeries(arr: SeriesGroup[], sort: SortMode, dir: 'asc' | 'desc'): SeriesGroup[] {
+  const byTitle = (a: SeriesGroup, b: SeriesGroup): number =>
+    a.title.localeCompare(b.title, undefined, { numeric: true, sensitivity: 'base' })
+  const recentOf = (s: SeriesGroup): number => Math.max(...s.chapters.map((c) => c.mtime))
+  const viewedOf = (s: SeriesGroup): number => Math.max(0, ...s.chapters.map((c) => c.lastViewedAt ?? 0))
+  const sumViews = (s: SeriesGroup): number => s.chapters.reduce((n, c) => n + c.viewCount, 0)
+  const maxRank = (s: SeriesGroup): number => Math.max(0, ...s.chapters.map((c) => c.rank))
+  const artistOf = (s: SeriesGroup): string => s.chapters.find((c) => c.artist)?.artist?.trim() ?? ''
+  let out = [...arr]
+  if (sort === 'recent') out.sort((a, b) => recentOf(b) - recentOf(a))
+  else if (sort === 'viewed') out.sort((a, b) => viewedOf(b) - viewedOf(a))
+  else if (sort === 'title') out.sort(byTitle)
+  else if (sort === 'views') out.sort((a, b) => sumViews(b) - sumViews(a))
+  else if (sort === 'rank') out.sort((a, b) => maxRank(b) - maxRank(a))
+  else if (sort === 'artist')
+    out.sort((a, b) => {
+      const ka = artistOf(a)
+      const kb = artistOf(b)
+      if (!ka && !kb) return byTitle(a, b)
+      if (!ka) return 1
+      if (!kb) return -1
+      return ka.localeCompare(kb, undefined, { numeric: true, sensitivity: 'base' })
+    })
+  if (dir === 'asc') {
+    out.reverse()
+    if (sort === 'artist') out = [...out.filter((s) => artistOf(s)), ...out.filter((s) => !artistOf(s))]
+  }
+  return out
 }

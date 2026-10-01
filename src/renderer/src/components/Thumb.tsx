@@ -1,28 +1,100 @@
 import { useEffect, useRef, useState } from 'react'
-import type { JSX } from 'react'
+import type { JSX, RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { loadThumb, peekThumb, syncThumbNonce, onThumb } from '../thumbs'
 import { getImages } from '../images'
 import { useStore } from '../store'
 
-// Loads the cached thumbnail (generated once, reused forever). Defers work until
-// the card is near the viewport. Hovering pops a large preview that the wheel
-// pages through (down = next page, up = previous).
-export default function Thumb({ workId }: { workId: string }): JSX.Element {
-  const ref = useRef<HTMLDivElement>(null)
-  const [src, setSrc] = useState<string | null>(() => peekThumb(workId) ?? null)
-  // Cached cover → no need to wait for the viewport observer.
-  const [visible, setVisible] = useState(() => peekThumb(workId) !== undefined)
-  // Bumped after an online cover regen → drop the cached thumb and reload.
-  const nonce = useStore((s) => s.thumbNonce)
+// Hover-to-peek for a thumbnail: after hovering 750ms a large preview pops up
+// beside it (PreviewPortal) and the wheel pages through the work (down = next).
+// `getImgs` is fetched lazily on the first peek. Spread `handlers` onto the
+// thumb element (attached to `ref`) and render `portal` inside it.
+export function useHoverPreview(
+  ref: RefObject<HTMLDivElement | null>,
+  getImgs: () => Promise<string[]>
+): { handlers: { onMouseEnter: () => void; onMouseLeave: () => void }; portal: JSX.Element | null } {
   const previewOn = useStore((s) => s.settings.thumbHoverPreview !== false)
-
-  // Hover preview state.
   const enterTimer = useRef<number | undefined>(undefined)
   const [preview, setPreview] = useState(false)
   const [rect, setRect] = useState<DOMRect | null>(null)
   const [imgs, setImgs] = useState<string[] | null>(null)
   const [idx, setIdx] = useState(0)
+
+  // While previewing, capture the wheel on the thumb (non-passive so the list
+  // doesn't scroll) and step through pages.
+  useEffect(() => {
+    const el = ref.current
+    if (!el || !preview) return
+    const onWheel = (e: WheelEvent): void => {
+      e.preventDefault()
+      setIdx((i) => {
+        const n = imgs?.length ?? 0
+        if (n === 0) return i
+        return Math.max(0, Math.min(n - 1, i + (e.deltaY > 0 ? 1 : -1)))
+      })
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [preview, imgs, ref])
+
+  // A pending timer must not fire after the card unmounted.
+  useEffect(() => () => window.clearTimeout(enterTimer.current), [])
+
+  const onMouseEnter = (): void => {
+    if (!previewOn) return
+    const el = ref.current
+    if (!el) return
+    window.clearTimeout(enterTimer.current)
+    enterTimer.current = window.setTimeout(() => {
+      setRect(el.getBoundingClientRect())
+      setIdx(0)
+      setPreview(true)
+      getImgs()
+        .then((a) => setImgs(a))
+        .catch(() => setImgs([]))
+    }, 750)
+  }
+  const onMouseLeave = (): void => {
+    window.clearTimeout(enterTimer.current)
+    setPreview(false)
+  }
+
+  const portal =
+    preview && rect && imgs && imgs.length > 0 ? (
+      <PreviewPortal rect={rect} src={imgs[idx]} page={idx + 1} total={imgs.length} onClose={onMouseLeave} />
+    ) : null
+  return { handlers: { onMouseEnter, onMouseLeave }, portal }
+}
+
+// Thumbnail url of a local work: the cached ≤480px webp (generated once, then
+// reused). Starts with the in-memory value when already known; otherwise waits
+// until `enabled` and loads it, and picks up a later (re)generation. A thumb
+// regen elsewhere (thumbNonce bump) refetches from disk.
+export function useWorkThumb(workId: string | undefined, enabled = true): string | null {
+  const [src, setSrc] = useState<string | null>(() => (workId ? peekThumb(workId) ?? null : null))
+  const nonce = useStore((s) => s.thumbNonce)
+  useEffect(() => {
+    if (!workId) return setSrc(null)
+    if (!enabled) return
+    let alive = true
+    syncThumbNonce(nonce)
+    loadThumb(workId).then((c) => alive && setSrc(c))
+    const off = onThumb(workId, (c) => alive && setSrc(c))
+    return () => {
+      alive = false
+      off()
+    }
+  }, [workId, enabled, nonce])
+  return src
+}
+
+// Local work thumbnail. Loading is deferred until the card is near the
+// viewport (unless the thumb is already in memory); hover shows the preview.
+export default function Thumb({ workId }: { workId: string }): JSX.Element {
+  const ref = useRef<HTMLDivElement>(null)
+  const [visible, setVisible] = useState(() => peekThumb(workId) !== undefined)
+  const src = useWorkThumb(workId, visible)
+  const { handlers, portal } = useHoverPreview(ref, () => getImages(workId))
 
   useEffect(() => {
     const el = ref.current
@@ -38,60 +110,13 @@ export default function Thumb({ workId }: { workId: string }): JSX.Element {
     )
     io.observe(el)
     return () => io.disconnect()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  useEffect(() => {
-    if (!visible) return
-    let alive = true
-    syncThumbNonce(nonce) // regen happened → refetch from disk (once per bump)
-    loadThumb(workId).then((c) => alive && setSrc(c))
-    const off = onThumb(workId, (c) => alive && setSrc(c))
-    return () => {
-      alive = false
-      off()
-    }
-  }, [visible, workId, nonce])
-
-  // While previewing, capture the wheel on the thumb (non-passive so we can stop
-  // the list from scrolling) and step through pages.
-  useEffect(() => {
-    const el = ref.current
-    if (!el || !preview) return
-    const onWheel = (e: WheelEvent): void => {
-      e.preventDefault()
-      setIdx((i) => {
-        const n = imgs?.length ?? 0
-        if (n === 0) return i
-        return Math.max(0, Math.min(n - 1, i + (e.deltaY > 0 ? 1 : -1)))
-      })
-    }
-    el.addEventListener('wheel', onWheel, { passive: false })
-    return () => el.removeEventListener('wheel', onWheel)
-  }, [preview, imgs])
-
-  const onEnter = (): void => {
-    if (!previewOn) return
-    const el = ref.current
-    if (!el) return
-    window.clearTimeout(enterTimer.current)
-    enterTimer.current = window.setTimeout(() => {
-      setRect(el.getBoundingClientRect())
-      setIdx(0)
-      setPreview(true)
-      getImages(workId).then((a) => setImgs(a))
-    }, 750)
-  }
-  const onLeave = (): void => {
-    window.clearTimeout(enterTimer.current)
-    setPreview(false)
-  }
-
   return (
-    <div className="thumb" ref={ref} onMouseEnter={onEnter} onMouseLeave={onLeave}>
+    <div className="thumb" ref={ref} {...handlers}>
       {src ? <img src={src} loading="lazy" alt="" /> : <div className="thumb-ph" />}
-      {preview && rect && imgs && imgs.length > 0 && (
-        <PreviewPortal rect={rect} src={imgs[idx]} page={idx + 1} total={imgs.length} onClose={onLeave} />
-      )}
+      {portal}
     </div>
   )
 }

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { JSX } from 'react'
-import { useStore } from '../store'
+import { useStore, useSeriesRoots } from '../store'
 import { groupSeries, chapterNum } from '../util'
 import type { TokiChapter } from '../../../shared/ipc'
+import { ChapterPicker, DownloadStatus } from './DownloadParts'
 import type { HitomiProgress } from '../../../shared/ipc'
 
 // Normalize a title to a comparison key (drop spaces + punctuation, lowercase),
@@ -28,9 +29,7 @@ export default function TokiDownloadModal({
 }): JSX.Element {
   const works = useStore((s) => s.works)
   const startDownload = useStore((s) => s.startDownload)
-  const normalRootsSetting = useStore((s) => s.settings.normalRoots)
-  const normalFav = useStore((s) => s.settings.normalFavoritesDir)
-  const normalDl = useStore((s) => s.settings.normalDownloadDir)
+  const roots = useSeriesRoots()
 
   const [phase, setPhase] = useState<Phase>('menu')
   const [chapters, setChapters] = useState<TokiChapter[] | null>(null)
@@ -64,7 +63,6 @@ export default function TokiDownloadModal({
   // Highest chapter number already sitting in the local general-manga library
   // for this series (matched by normalized title). 0 = nothing downloaded yet.
   const existingMax = useMemo(() => {
-    const roots = [...(normalRootsSetting ?? []), normalFav, normalDl].filter(Boolean) as string[]
     const normal = works.filter((w) => (w.library ?? 'hitomi') === 'normal')
     const target = keyOf(series.title)
     let max = 0
@@ -76,7 +74,7 @@ export default function TokiDownloadModal({
       }
     }
     return max
-  }, [works, normalRootsSetting, normalFav, normalDl, series.title])
+  }, [works, roots, series.title])
 
   const nextChapters = useMemo(
     () => (chapters ?? []).filter((c) => c.num > existingMax),
@@ -117,21 +115,6 @@ export default function TokiDownloadModal({
   }
 
   const total = chapters?.length ?? 0
-  const toggle = (url: string): void =>
-    setSelected((s) => {
-      const n = new Set(s)
-      if (n.has(url)) n.delete(url)
-      else n.add(url)
-      return n
-    })
-  const selectAll = (): void => setSelected(new Set((chapters ?? []).map((c) => c.url)))
-  const selectNone = (): void => setSelected(new Set())
-  const invert = (): void =>
-    setSelected((s) => {
-      const n = new Set<string>()
-      for (const c of chapters ?? []) if (!s.has(c.url)) n.add(c.url)
-      return n
-    })
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -171,71 +154,25 @@ export default function TokiDownloadModal({
 
         {phase === 'select' && (
           <div className="dl-select">
-            <div className="dl-select-bar">
-              <button className="mini" onClick={selectAll}>
-                전체 선택
-              </button>
-              <button className="mini" onClick={selectNone}>
-                전체 해제
-              </button>
-              <button className="mini" onClick={invert}>
-                선택 반전
-              </button>
-              <span className="hint" style={{ margin: 0 }}>
-                {selected.size}/{total} 선택
-              </span>
-            </div>
-            <div className="dl-chapter-list">
-              {(chapters ?? []).map((c) => (
-                <label key={c.url} className={`dl-chapter ${selected.has(c.url) ? 'sel' : ''}`}>
-                  <input type="checkbox" checked={selected.has(c.url)} onChange={() => toggle(c.url)} />
-                  <span className="dl-chapter-title">{c.title}</span>
-                </label>
-              ))}
-            </div>
-            <div className="dl-select-foot">
-              <button className="btn" onClick={() => setPhase('menu')}>
-                취소
-              </button>
-              <button className="btn primary" disabled={!selected.size} onClick={() => run('selected')}>
-                확인 ({selected.size}화 받기)
-              </button>
-            </div>
+            <ChapterPicker
+              chapters={chapters ?? []}
+              selected={selected}
+              setSelected={setSelected}
+              onCancel={() => setPhase('menu')}
+              onConfirm={() => run('selected')}
+              confirmLabel={`확인 (${selected.size}화 받기)`}
+            />
           </div>
         )}
 
-        {phase === 'downloading' && (
-          <div className="dl-progress-box">
-            <div className="dl-bar">
-              <div
-                className="dl-bar-fill"
-                style={{ width: prog?.total ? `${(prog.done / prog.total) * 100}%` : '10%' }}
-              />
-            </div>
-            <p className="hint">
-              다운로드 중… {prog ? `${prog.done}/${prog.total}` : ''} {prog?.label ?? ''}
-            </p>
-            <p className="hint">닫아도 백그라운드로 계속됩니다. (다운로드 탭에서 진행 확인)</p>
-          </div>
-        )}
-
-        {phase === 'done' && (
-          <div className="dl-progress-box">
-            <p className="dl-done-msg">✓ 다운로드 완료</p>
-            <button className="btn primary" onClick={onClose}>
-              닫기
-            </button>
-          </div>
-        )}
-
-        {phase === 'error' && (
-          <div className="dl-progress-box">
-            <div className="warn err">{err}</div>
-            <button className="btn" onClick={() => setPhase('menu')}>
-              돌아가기
-            </button>
-          </div>
-        )}
+        <DownloadStatus
+          phase={phase}
+          prog={prog}
+          err={err}
+          note="닫아도 백그라운드로 계속됩니다. (다운로드 탭에서 진행 확인)"
+          onClose={onClose}
+          onBack={() => setPhase('menu')}
+        />
       </div>
     </div>
   )

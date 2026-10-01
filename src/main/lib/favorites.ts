@@ -1,5 +1,5 @@
 import { promises as fs } from 'fs'
-import { join, basename, dirname } from 'path'
+import { join, basename, dirname, resolve, sep } from 'path'
 import type { Work, WorkGroup } from '../../shared/types'
 
 // Sanitize a group name for use as a folder name (strip illegal chars).
@@ -16,10 +16,19 @@ async function rmdirIfEmpty(dir: string): Promise<void> {
   }
 }
 
-// Favoriting physically moves the work folder into the favorites dir (feature 3).
-// homePath remembers where it came from so un-favoriting can move it back.
+// Is `path` the folder `dir` or inside it?
+export function isUnder(path: string, dir: string | null | undefined): boolean {
+  if (!dir) return false
+  const d = resolve(dir)
+  const p = resolve(path)
+  return p === d || p.startsWith(d + sep)
+}
 
-async function moveDir(src: string, dest: string): Promise<void> {
+// With favoriteMoveToFolder, a heart physically moves the work folder into the
+// favorites dir; homePath remembers where it came from so unhearting can move
+// it back (see favoriteSync.ts).
+
+export async function moveDir(src: string, dest: string): Promise<void> {
   if (src === dest) return
   await fs.mkdir(join(dest, '..'), { recursive: true })
   try {

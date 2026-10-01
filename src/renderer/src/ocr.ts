@@ -96,15 +96,3 @@ export async function ocrBlocks(img: HTMLImageElement, langHint?: string): Promi
   }
   return { w, h, blocks }
 }
-
-// Free worker memory (e.g. when switching engines). Not strictly required.
-export async function terminateOcr(): Promise<void> {
-  for (const p of workers.values()) {
-    try {
-      ;(await p).terminate()
-    } catch {
-      /* ignore */
-    }
-  }
-  workers.clear()
-}

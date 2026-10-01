@@ -1,11 +1,17 @@
+// Global app state (zustand): library data, navigation + tabs, home controls,
+// downloads / background jobs, online state and favorites. Components select
+// slices with useStore((s) => …); actions call window.api (main IPC) and
+// write the results back here. The AppState interface documents each field;
+// the implementation below is grouped into the same sections.
 import { create } from 'zustand'
+import { useMemo } from 'react'
 import type { Work, Settings, SortMode, SessionState, OnlineFav, FitMode } from '../../shared/types'
 import { DEFAULT_SETTINGS, SPLIT_SETTING_KEYS } from '../../shared/types'
 import type { HitomiListSource, HitomiProgress, TokiChapter, UpdateStatus } from '../../shared/ipc'
 import { exportWorkText, exportWorkImages } from './export'
 import { warmThumbs, invalidateThumb } from './thumbs'
 import { convertWorkToWebp } from './convert'
-import { thumbTargetIds, groupSeries, titleKey } from './util'
+import { thumbTargetIds, groupSeries, titleKey, seriesRoots, isTokiCode } from './util'
 
 // Merge the active mode's per-mode overrides over the base settings so hitomi and
 // general-manga keep independent display/reader/sort prefs. The result still
@@ -79,7 +85,7 @@ export interface Job {
 // A download's library mode is encoded in its code: numeric = hitomi gallery;
 // an http(s) url (toki chapter) or a "backup:" code = general-manga (normal).
 export function downloadMode(code: string): 'hitomi' | 'normal' {
-  return /^https?:/.test(code) || code.startsWith('backup:') ? 'normal' : 'hitomi'
+  return isTokiCode(code) || code.startsWith('backup:') ? 'normal' : 'hitomi'
 }
 
 export interface Tab {
@@ -131,7 +137,9 @@ export type Filter =
   | { kind: 'artist'; value: string }
   | { kind: 'tag'; value: string }
   | { kind: 'favorites' }
-  | { kind: 'favlists'; value: string[] } // works in ANY of the checked favorite lists
+  // Works in ANY of the checked favorite lists: value = list names (FAV_BASE =
+  // the hearts), codes = union of the checked imported lists' gallery codes.
+  | { kind: 'favlists'; value: string[]; codes: string[] }
 
 type View = 'home' | 'reader' | 'settings' | 'download' | 'browse' | 'manage'
 
@@ -235,7 +243,7 @@ interface AppState {
   setNeedDownloadDir: (v: boolean) => void
   favDownloadedOnly: boolean // local favorites view: show only already-downloaded entries
   setFavDownloadedOnly: (v: boolean) => void
-  favOnlineOnly: boolean // online favorites view: show only online favorites (exclude local-only)
+  favOnlineOnly: boolean // online favorites views: show only favorites not yet downloaded
   setFavOnlineOnly: (v: boolean) => void
   onlineListFav: boolean // reader's left online list shows favorites (opened from fav view)
   setOnlineListFav: (v: boolean) => void
@@ -401,6 +409,9 @@ interface AppState {
   // Unified favorite toggle: flips BOTH the online favorite and (if the gallery is
   // in the local library) the local favorite, so a favorite is one state everywhere.
   toggleUnifiedFav: (code: string, meta?: Partial<OnlineFav>) => Promise<void>
+  // Heart a local work: hitomi-coded works via the favorites list (same as
+  // toggleUnifiedFav), others locally.
+  setWorkFavorite: (work: Work, fav: boolean) => Promise<void>
   // General-manga unified favorite: a local series (by key) and its online toki
   // series (by url) are linked by normalized title and toggled together.
   toggleNormalUnifiedFav: (p: { title: string; localKey?: string; url?: string; meta?: Partial<OnlineFav> }) => Promise<void>
@@ -598,6 +609,8 @@ export const useStore = create<AppState>((set, get) => ({
   favOnlineOnly: false,
   onlineListFav: false,
 
+
+  // ---------- library data (works / settings) ----------
   setWorks: (works) => set({ works }),
   upsertWork: (w) => set((st) => ({ works: st.works.map((x) => (x.id === w.id ? w : x)) })),
   addWork: (w) =>
@@ -629,6 +642,8 @@ export const useStore = create<AppState>((set, get) => ({
   },
   setLoading: (loading) => set({ loading }),
 
+
+  // ---------- navigation: views, unsaved-settings guard, back/forward history ----------
   setSettingsDirty: (b) => set({ settingsDirty: b }),
   guardedNav: (nav) => guardLeave(get, set, nav),
   clearPendingNav: () => set({ pendingNav: null }),
@@ -769,6 +784,8 @@ export const useStore = create<AppState>((set, get) => ({
   setMenuOpen: (b) => set({ menuOpen: b }),
   toggleListCollapsed: () => set((st) => ({ listCollapsed: !st.listCollapsed })),
   bumpThumbNonce: () => set((st) => ({ thumbNonce: st.thumbNonce + 1 })),
+
+  // ---------- tabs: replace / continuous reading / open ----------
   replaceTabWork: (tabId, side, workId) =>
     set((st) => {
       const mode = (st.works.find((w) => w.id === workId)?.library ?? 'hitomi') as 'hitomi' | 'normal'
@@ -924,6 +941,8 @@ export const useStore = create<AppState>((set, get) => ({
 
   // Open a work in split view. If a reader tab is active, the work fills that
   // tab's right pane; otherwise a new split tab opens with the work on the left.
+
+  // ---------- split view ----------
   openSplit: (workId) =>
     set((st) => splitInto(st, { workId })),
   openSplitOnline: (g) =>
@@ -1070,6 +1089,8 @@ export const useStore = create<AppState>((set, get) => ({
       )
     })),
 
+
+  // ---------- tab groups, close / reopen, glance, per-tab reader state, session restore ----------
   createTabGroup: (name) => {
     const id = 'tg' + Date.now().toString(36)
     const existing = get().tabGroups
@@ -1260,6 +1281,8 @@ export const useStore = create<AppState>((set, get) => ({
       }
     }),
 
+
+  // ---------- home list controls: search, sort, filters, groups ----------
   setSearch: (search) => set({ search }),
   // Seed the home search input with a clicked tag (view→home so it's visible);
   // Home consumes the nonce and appends the token without auto-searching.
@@ -1317,6 +1340,8 @@ export const useStore = create<AppState>((set, get) => ({
       return { settings, works, groupFilter }
     })
   },
+
+  // ---------- downloads (queue, stop / retry, progress) ----------
   pushDownloadProgress: (p) =>
     set((st) => {
       // Only download-flow events carry a gallery code; enrich emits code:''.
@@ -1346,7 +1371,7 @@ export const useStore = create<AppState>((set, get) => ({
     const destReady =
       spec.kind === 'hitomi'
         ? !!(s.downloadDir || s.libraryRoots[0])
-        : !!(s.normalDownloadDir || s.normalFavoritesDir || s.normalRoots?.[0])
+        : !!(s.normalDownloadDir || s.normalRoots?.[0])
     if (!destReady) {
       set({ needDownloadDir: true })
       return null
@@ -1433,6 +1458,8 @@ export const useStore = create<AppState>((set, get) => ({
       }
     }
   },
+
+  // ---------- activity bar: background jobs, auto-update, misc toggles ----------
   toggleActivity: (open) =>
     set((st) => ({ activityOpen: open === undefined ? !st.activityOpen : open })),
   setUpdate: (s) => set({ update: s }),
@@ -1514,8 +1541,7 @@ export const useStore = create<AppState>((set, get) => ({
     }
     set({ loading: false })
     const s = get().settings
-    const normalRoots = [s.normalRoots, s.normalFavoritesDir, s.normalDownloadDir].flat().filter(Boolean) as string[]
-    const ids = thumbTargetIds(w, libraryMode, normalRoots)
+    const ids = thumbTargetIds(w, libraryMode, seriesRoots(s))
     if (ids.length) {
       const thumbJob = startJob('thumb', libraryMode, '썸네일 생성')
       updateJob(thumbJob, { total: ids.length })
@@ -1539,6 +1565,8 @@ export const useStore = create<AppState>((set, get) => ({
         .catch((e: any) => endJob(gjob, { status: 'error', error: String(e?.message ?? e) }))
     }
   },
+
+  // ---------- layout + reader preferences (persisted, per library where split) ----------
   setListWidth: (px, persist) => {
     const w = Math.max(200, Math.min(700, px))
     set({ listWidth: w })
@@ -1594,6 +1622,8 @@ export const useStore = create<AppState>((set, get) => ({
     set({ settings: s })
     window.api.saveSettings(s)
   },
+
+  // ---------- online browsing, cross-search, online + unified favorites ----------
   setBrowseSource: (s) => set({ browseSource: s }),
   searchOnline: (query) =>
     guardLeave(get, set, () =>
@@ -1637,20 +1667,32 @@ export const useStore = create<AppState>((set, get) => ({
   },
   toggleUnifiedFav: async (code, meta) => {
     const st = get()
-    const work = st.works.find((w) => w.code === code)
-    const on = !!st.onlineFavs[code]?.favorite || !!work?.favorite
-    const next = !on
-    // Online favorite state.
-    const fav = await window.api.setOnlineFav(code, { favorite: next }, meta)
-    set((s) => ({ onlineFavs: applyFav(s.onlineFavs, fav) }))
-    // Local favorite state (folder-as-truth: moves into/out of the favorites dir).
-    if (work) get().upsertWork(await window.api.setFavorite(work.id, next))
+    const on = !!st.onlineFavs[code]?.favorite || st.works.some((w) => w.code === code && w.favorite)
+    // Main updates the favorites list AND every local copy (folder move per
+    // settings); adopt both results.
+    const r = await window.api.setFavoriteByCode(code, !on, meta)
+    set((s) => ({ onlineFavs: applyFav(s.onlineFavs, r.fav) }))
+    for (const w of r.works) get().upsertWork(w)
+  },
+  setWorkFavorite: async (work, fav) => {
+    if (work.code && /^\d+$/.test(work.code) && (work.library ?? 'hitomi') === 'hitomi') {
+      const r = await window.api.setFavoriteByCode(work.code, fav, {
+        title: work.title,
+        artist: work.artist,
+        language: work.language,
+        pageCount: work.pageCount
+      })
+      set((s) => ({ onlineFavs: applyFav(s.onlineFavs, r.fav) }))
+      for (const w of r.works) get().upsertWork(w)
+    } else {
+      get().upsertWork(await window.api.setFavorite(work.id, fav))
+    }
   },
   toggleNormalUnifiedFav: async ({ title, localKey, url, meta }) => {
     const st = get()
     const k = titleKey(title)
     const s = st.settings
-    const roots = [...(s.normalRoots ?? []), s.normalFavoritesDir].filter(Boolean) as string[]
+    const roots = seriesRoots(s)
     const localKeys = localKey
       ? [localKey]
       : k
@@ -1661,7 +1703,7 @@ export const useStore = create<AppState>((set, get) => ({
     const urls = new Set<string>(url ? [url] : [])
     if (k) {
       for (const f of Object.values(st.onlineFavs)) {
-        if (/^https?:/.test(f.code) && titleKey(f.title) === k) urls.add(f.code)
+        if (isTokiCode(f.code) && titleKey(f.title) === k) urls.add(f.code)
       }
     }
     const favS = s.normalFavSeries ?? []
@@ -1692,7 +1734,7 @@ useStore.subscribe((st, prev) => {
   window.clearTimeout(warmTimer)
   warmTimer = window.setTimeout(() => {
     const { works, settings: s, startJob, updateJob, endJob } = useStore.getState()
-    const normalRoots = [s.normalRoots, s.normalFavoritesDir, s.normalDownloadDir].flat().filter(Boolean) as string[]
+    const normalRoots = seriesRoots(s)
     for (const mode of ['hitomi', 'normal'] as const) {
       // Keyed by page count too: a work registered mid-download (no images yet →
       // "no cover" cached) gets re-checked once its pages land, without a restart.
@@ -1712,3 +1754,34 @@ useStore.subscribe((st, prev) => {
     }
   }, 500)
 })
+
+// seriesRoots() for components, memoized on the setting it reads.
+export function useSeriesRoots(): string[] {
+  const roots = useStore((s) => s.settings.normalRoots)
+  return useMemo(() => seriesRoots({ normalRoots: roots }), [roots])
+}
+
+// Lookups from hitomi gallery code to the local library, for online views:
+//   libCodes      — codes already in the library (card shows "downloaded")
+//   codeWorkId    — code → local work id (show the local cover thumbnail)
+//   localFavCodes — codes favorited locally (heart is on if favorited in
+//                   EITHER the library or online)
+export function useLibraryCodes(): {
+  libCodes: Set<string>
+  codeWorkId: Map<string, string>
+  localFavCodes: Set<string>
+} {
+  const works = useStore((s) => s.works)
+  return useMemo(() => {
+    const libCodes = new Set<string>()
+    const codeWorkId = new Map<string, string>()
+    const localFavCodes = new Set<string>()
+    for (const w of works) {
+      if (!w.code) continue
+      libCodes.add(w.code)
+      codeWorkId.set(w.code, w.id)
+      if (w.favorite) localFavCodes.add(w.code)
+    }
+    return { libCodes, codeWorkId, localFavCodes }
+  }, [works])
+}

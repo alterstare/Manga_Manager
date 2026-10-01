@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { JSX } from 'react'
-import { useStore } from '../store'
-import { selectWorks, allTags, matchesSearch, analyzeSeries, seriesOf, tagToken, artistFolderOf, titleKey } from '../util'
+import { useStore, useSeriesRoots } from '../store'
+import { selectWorks, allTags, matchesSearch, analyzeSeries, seriesOf, tagToken, artistFolderOf, isOnlineTitleFav } from '../util'
 import type { SortMode, Work } from '../../../shared/types'
 import Thumb from './Thumb'
 import Stars from './Stars'
@@ -25,8 +25,6 @@ export default function LibraryList(): JSX.Element {
   const seed = useStore((s) => s.randomSeed)
   const ignoreBrackets = useStore((s) => s.settings.ignoreBracketTagsInSort)
   const groups = useStore((s) => s.settings.groups)
-  const normalRootsSetting = useStore((s) => s.settings.normalRoots)
-  const normalFav = useStore((s) => s.settings.normalFavoritesDir)
   const scheme = useStore((s) => s.settings.normalChapterScheme)
   const tabs = useStore((s) => s.tabs)
   const activeTabId = useStore((s) => s.activeTabId)
@@ -49,10 +47,7 @@ export default function LibraryList(): JSX.Element {
 
   const activeWorkId = tabs.find((t) => t.id === activeTabId)?.workId
   const activeWork = works.find((w) => w.id === activeWorkId)
-  const normalRoots = useMemo(
-    () => [...(normalRootsSetting ?? []), normalFav].filter(Boolean) as string[],
-    [normalRootsSetting, normalFav]
-  )
+  const normalRoots = useSeriesRoots()
   const isNormalActive = !!activeWork && (activeWork.library ?? 'hitomi') === 'normal'
   const flattenRoots = useStore((s) => s.settings.flattenRoots)
   // If the active hitomi work sits under an "artist folder" (flattenRoots), the
@@ -78,8 +73,7 @@ export default function LibraryList(): JSX.Element {
   const seriesFav = useMemo(() => {
     if (!activeGroup) return false
     if ((favSeries ?? []).includes(activeGroup.key)) return true
-    const k = titleKey(activeGroup.title)
-    return !!k && Object.values(onlineFavs).some((f) => f.favorite && /^https?:/.test(f.code) && titleKey(f.title) === k)
+    return isOnlineTitleFav(onlineFavs, activeGroup.title)
   }, [activeGroup, favSeries, onlineFavs])
 
   const list = useMemo(() => {
@@ -131,8 +125,8 @@ export default function LibraryList(): JSX.Element {
   const addToken = (tok: string): void =>
     setInput((cur) => (cur.trim() ? cur.trim() + ' ' + tok : tok))
 
-  const toggleFav = async (w: Work): Promise<void> =>
-    upsertWork(await window.api.setFavorite(w.id, !w.favorite))
+  const setWorkFavorite = useStore((s) => s.setWorkFavorite)
+  const toggleFav = (w: Work): Promise<void> => setWorkFavorite(w, !w.favorite)
   const setRank = async (w: Work, r: number): Promise<void> =>
     upsertWork(await window.api.setRank(w.id, r))
   const applyGroup = async (id: string, ids: string[]): Promise<void> =>

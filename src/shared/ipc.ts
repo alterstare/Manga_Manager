@@ -1,5 +1,5 @@
 // IPC channel names + the shape of the API exposed to the renderer via preload.
-import type { Work, Settings, SessionState, ParsedName, HitomiMeta, OnlineFav } from './types'
+import type { Work, Settings, SessionState, ParsedName, HitomiMeta, OnlineFav, ScanProgress } from './types'
 
 export type OnlineSort = 'date' | 'today' | 'week' | 'month' | 'year'
 
@@ -12,24 +12,6 @@ export type HitomiListSource =
   | { kind: 'search'; query: string; language: string | null; sort?: SearchSort }
 
 // --- General-manga online (toki-family mirror) ---
-// Genre filter chips. '전체' = no filter. The rest are sent as the site's genre
-// tag; live-tune the exact tokens against the real site if they don't match.
-export const TOKI_GENRES = [
-  '전체',
-  '학원',
-  '액션',
-  'SF',
-  '스토리',
-  '판타지',
-  '드라마',
-  '로맨스',
-  '시대',
-  '스포츠',
-  '일상',
-  '성인',
-  '무협'
-] as const
-export type TokiGenre = (typeof TOKI_GENRES)[number]
 export type TokiSort = 'date' | 'new' | 'bookmark' | 'view' | 'rating' | 'chapter'
 export type TokiType = 'manga' | 'webtoon'
 export interface TokiListSource {
@@ -83,8 +65,6 @@ export const IPC = {
   hitomiFindKorean: 'hitomi:findKorean',
   exportFavorites: 'fav:export',
   importFavorites: 'fav:import',
-  importFavoriteList: 'fav:importList',
-  removeFavoriteList: 'fav:removeList',
   importOnlineFavList: 'fav:importOnlineList',
   removeOnlineFavList: 'fav:removeOnlineList',
   hitomiSummaries: 'hitomi:summaries',
@@ -93,9 +73,7 @@ export const IPC = {
   mergeFavorites: 'fav:merge',
   getOnlineFavs: 'online:getFavs',
   setOnlineFav: 'online:setFav',
-  exportOnlineFavs: 'online:export',
-  importOnlineFavs: 'online:import',
-  mergeOnlineFavs: 'online:merge',
+  setFavoriteByCode: 'fav:setByCode',
   translateImage: 'translate:image',
   translateTexts: 'translate:texts', // free engine: renderer OCRs, main translates strings
   getTransEdits: 'translate:getEdits', // load all persisted manual edits (bubble box/color/text)
@@ -228,7 +206,7 @@ export interface Api {
   scanLibrary: () => Promise<Work[]>
   // Rescan a single folder; works get favorite/group inferred from their path.
   scanFolder: (root: string) => Promise<Work[]>
-  onScanProgress: (cb: (p: { scanned: number; total: number; current: string; done: boolean }) => void) => () => void
+  onScanProgress: (cb: (p: ScanProgress) => void) => () => void
   organizeLanguages: () => Promise<Work[]>
   organizeByGenre: () => Promise<{ works: Work[]; moved: number }>
   onOrganizeProgress: (cb: (p: { moved: number; current: string; done: boolean }) => void) => () => void
@@ -249,14 +227,13 @@ export interface Api {
     artist: string | null
     title: string
   }) => Promise<GallerySummary[]>           // Korean editions of a work
+  // Favorites ⇄ Pupil-compatible JSON ({favorites, favorite_tags, ranks}).
+  // Export = every favorited gallery code; import merges (hearts the codes,
+  // syncing downloaded works) and returns how many were already downloaded.
   exportFavorites: () => Promise<{ ok: boolean; count: number; path?: string }>
   importFavorites: () => Promise<{ ok: boolean; matched: number; total: number }>
-  // Import a favorite file as its OWN named list (favlist:<file name> tag) so it
-  // can be browsed separately. Adds the tag to matched local works.
-  importFavoriteList: () => Promise<{ ok: boolean; matched: number; total: number; name: string }>
-  removeFavoriteList: (name: string) => Promise<{ ok: boolean }>
-  // Online favorite lists: import a file as a named online list, remove one, and
-  // fetch gallery summaries for a set of codes (to render the list).
+  // Favorite lists: import a file as a named list of codes, remove one, and
+  // fetch gallery summaries for a set of codes (to render a list).
   importOnlineFavList: () => Promise<{ ok: boolean; name: string; total: number }>
   removeOnlineFavList: (name: string) => Promise<{ ok: boolean }>
   hitomiSummaries: (codes: string[]) => Promise<GallerySummary[]>
@@ -271,9 +248,13 @@ export interface Api {
     patch: { favorite?: boolean; rank?: number },
     meta?: Partial<OnlineFav>
   ) => Promise<OnlineFav>
-  exportOnlineFavs: () => Promise<{ ok: boolean; count: number; path?: string }>
-  importOnlineFavs: () => Promise<{ ok: boolean; count: number }>
-  mergeOnlineFavs: () => Promise<{ ok: boolean; count: number; files: number; path?: string }>
+  // Heart / unheart a hitomi gallery by code: updates the favorites list and
+  // every local work with that code (moving folders per favoriteMoveToFolder).
+  setFavoriteByCode: (
+    code: string,
+    fav: boolean,
+    meta?: Partial<OnlineFav>
+  ) => Promise<{ fav: OnlineFav; works: Work[] }>
   // OCR + translate one page. imageBase64 = JPEG/PNG bytes (base64, no prefix);
   // the renderer re-encodes webp/avif via canvas first. langHint = ja/en/zh.
   // w/h = the sent (downscaled) image pixel size, so engines returning

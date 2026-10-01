@@ -1,17 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { JSX } from 'react'
-import { useStore } from '../store'
+import { useLibraryCodes, useStore } from '../store'
 import type { GallerySummary, HitomiListSource, OnlineSort } from '../../../shared/ipc'
 import Pager from './Pager'
 import CopyCode from './CopyCode'
 import ContextMenu from './ContextMenu'
+import { useTagMenu } from './useTagMenu'
+import { hitomiFavCodes, hitomiFavGalleries } from '../favorites'
 import Stars from './Stars'
 import Dropdown from './Dropdown'
 import { CheckIcon, PauseIcon, PlayIcon, LanguageIcon, SearchIcon, FavoriteIcon, DownloadIcon, SyncIcon } from './icons'
 import OnlineThumb from './OnlineThumb'
 import { getOnlineImages } from '../images'
-import { favMeta, tagToken, allTags } from '../util'
-import { useFavSummaries, getFavSummary } from '../favSummaries'
+import { favMeta, tagToken } from '../util'
+import { useFavSummaries } from '../favSummaries'
 import type { OnlineGallery, DownloadItem } from '../store'
 
 const SORTS: [OnlineSort, string][] = [
@@ -51,44 +53,20 @@ export default function OnlineList(): JSX.Element {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [menu, setMenu] = useState<{ x: number; y: number; g: OnlineGallery } | null>(null)
-  const [crossMenu, setCrossMenu] = useState<{ x: number; y: number; query: string; raw: string } | null>(null)
-  const searchLocal = useStore((s) => s.searchLocal)
-  const addFavoriteTag = useStore((s) => s.addFavoriteTag)
+  const { openTagMenu, tagMenu } = useTagMenu('local')
   // Opened from the favorites view → show the unified favorites list (online favs
   // + locally-favorited works) instead of the latest online listing.
   const onlineListFav = useStore((s) => s.onlineListFav)
   const works = useStore((s) => s.works)
-  const favCodesL = useMemo(
-    () => Object.values(onlineFavs).filter((f) => f.favorite && /^\d+$/.test(f.code)).map((f) => f.code),
-    [onlineFavs]
+  const favCodes = useMemo(() => hitomiFavCodes(onlineFavs), [onlineFavs])
+  const sumVer = useFavSummaries(onlineListFav ? favCodes : [])
+  const favList = useMemo(
+    () => hitomiFavGalleries(onlineFavs, works),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [onlineFavs, works, sumVer]
   )
-  const sumVerL = useFavSummaries(onlineListFav ? favCodesL : [])
-  const favList = useMemo<GallerySummary[]>(() => {
-    const seen = new Set<string>()
-    const out: GallerySummary[] = []
-    for (const f of Object.values(onlineFavs)) {
-      if (!f.favorite || /^https?:/.test(f.code) || seen.has(f.code)) continue
-      seen.add(f.code)
-      const lw = works.find((w) => w.code === f.code)
-      out.push({ code: f.code, title: f.title, artists: f.artist ? [f.artist] : [], tags: lw ? allTags(lw) : getFavSummary(f.code)?.tags ?? [], language: f.language, type: null, pageCount: f.pageCount, thumbUrl: f.thumbUrl })
-    }
-    for (const w of works) {
-      if (!w.favorite || !w.code || /^https?:/.test(w.code) || seen.has(w.code)) continue
-      seen.add(w.code)
-      out.push({ code: w.code, title: w.title, artists: w.artist ? [w.artist] : [], tags: allTags(w), language: w.language, type: null, pageCount: w.pageCount, thumbUrl: null })
-    }
-    return out
-  }, [onlineFavs, works, sumVerL])
   const displayItems = onlineListFav ? favList : items
-  const codeWorkId = useMemo(() => {
-    const m = new Map<string, string>()
-    for (const w of works) if (w.code) m.set(w.code, w.id)
-    return m
-  }, [works])
-  const localFavCodes = useMemo(
-    () => new Set(works.filter((w) => w.favorite && w.code).map((w) => w.code!) as string[]),
-    [works]
-  )
+  const { codeWorkId, localFavCodes } = useLibraryCodes()
   const isFav = (code: string): boolean => !!onlineFavs[code]?.favorite || localFavCodes.has(code)
 
   useEffect(() => {
@@ -223,7 +201,7 @@ export default function OnlineList(): JSX.Element {
                     onContextMenu={(e) => {
                       e.preventDefault()
                       e.stopPropagation()
-                      setCrossMenu({ x: e.clientX, y: e.clientY, query: tagToken(`artist:${g.artists[0]}`), raw: g.artists[0] })
+                      openTagMenu(e, tagToken(`artist:${g.artists[0]}`), g.artists[0])
                     }}
                   >
                     {g.artists[0]}
@@ -240,7 +218,7 @@ export default function OnlineList(): JSX.Element {
                     onContextMenu={(e) => {
                       e.preventDefault()
                       e.stopPropagation()
-                      setCrossMenu({ x: e.clientX, y: e.clientY, query: tagToken(t), raw: t })
+                      openTagMenu(e, tagToken(t), t)
                     }}
                   >
                     {t}
@@ -335,17 +313,7 @@ export default function OnlineList(): JSX.Element {
           onClose={() => setMenu(null)}
         />
       )}
-      {crossMenu && (
-        <ContextMenu
-          x={crossMenu.x}
-          y={crossMenu.y}
-          items={[
-            { label: '로컬에서 검색', onClick: () => searchLocal(crossMenu.query) },
-            { label: '즐겨찾는 태그로 추가', onClick: () => addFavoriteTag(crossMenu.raw) }
-          ]}
-          onClose={() => setCrossMenu(null)}
-        />
-      )}
+      {tagMenu}
     </div>
   )
 }

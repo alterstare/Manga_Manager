@@ -5,6 +5,7 @@ import { join } from 'path'
 import type { Work, Settings, SessionState, OnlineFav } from '../../shared/types'
 import type { TransBlock } from '../../shared/ipc'
 import { DEFAULT_SETTINGS } from '../../shared/types'
+import { isUnder } from './favorites'
 
 // Plain-JSON persistence. Metadata for a few thousand works fits comfortably in
 // memory; searching/sorting happens in JS. Avoids native sqlite build pain on
@@ -73,11 +74,16 @@ export class Store {
     await writeJson(this.transEditsFile, this.transEdits)
   }
 
-  // Update favorite/rank for an online gallery; cache its display meta on first
-  // touch. A fav that is un-favorited and unranked is dropped from the map.
+  // How a scanned work's heart is decided (installed by favoriteSync at
+  // startup): (scanned work, stored predecessor, found inside favoritesDir).
+  favoriteRule: ((w: Work, prev: Work | undefined, inFavDir: boolean) => boolean) | null = null
+
+  // Update favorite/rank for an online gallery (hitomi code or toki url); cache
+  // its display meta on first touch. Un-favorited + unranked entries are dropped.
+  // `addedAt` may be given to keep an original favorite time (migration).
   setOnlineFav(
     code: string,
-    patch: { favorite?: boolean; rank?: number },
+    patch: { favorite?: boolean; rank?: number; addedAt?: number },
     meta?: Partial<OnlineFav>
   ): OnlineFav {
     const prev = this.onlineFavs.get(code)
@@ -111,27 +117,28 @@ export class Store {
   }
 
   // Reconcile a freshly-scanned work with the stored one. User state (rank,
-  // counts, manual tags) is preserved; favorite/group membership follows the
-  // folder LOCATION when a favorites dir is configured (feature 8) so manual
-  // folder moves are recognized, otherwise the stored flags are kept.
+  // counts, manual tags, favorite time) is preserved. The scanner marks works
+  // found inside the favorites folder with favorite=true; favoriteRule turns
+  // that into the real heart (the favorites list is the truth, a newly
+  // dragged-in work is added). Group membership still follows the folder
+  // location when a favorites dir is configured.
   private reconcile(w: Work, prev: Work | undefined): Work {
-    if (!prev) return w
-    // Location authority follows the relevant favorites dir per library, so a
-    // general-manga work isn't reset just because a hitomi favorites dir exists.
-    const locAuth =
-      (w.library ?? 'hitomi') === 'normal'
-        ? !!this.settings.normalFavoritesDir
-        : !!this.settings.favoritesDir
+    const inFavDir = w.favorite
+    const favorite = this.favoriteRule ? this.favoriteRule(w, prev, inFavDir) : (prev?.favorite ?? inFavDir)
+    const favoritedAt = favorite ? (prev?.favoritedAt ?? Date.now()) : prev?.favoritedAt
+    if (!prev) return { ...w, favorite, favoritedAt }
+    const locAuth = (w.library ?? 'hitomi') === 'hitomi' && !!this.settings.favoritesDir
     return {
       ...w,
       tags: w.tags,
       manualTags: prev.manualTags,
       library: w.library ?? prev.library, // location-derived; prefer fresh scan
-      favorite: locAuth ? w.favorite : prev.favorite,
+      favorite,
+      favoritedAt,
       groups: locAuth ? w.groups : prev.groups,
-      homePath: locAuth ? w.homePath : prev.homePath,
+      // Where to move back on unheart — only while it still sits in the folder.
+      homePath: prev.homePath && isUnder(w.path, this.settings.favoritesDir) ? prev.homePath : null,
       rank: prev.rank,
-      favoritedAt: prev.favoritedAt,
       viewCount: prev.viewCount,
       lastViewedAt: prev.lastViewedAt,
       addedAt: prev.addedAt,

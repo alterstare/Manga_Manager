@@ -6,14 +6,14 @@ import OnlineThumb from './OnlineThumb'
 import Stars from './Stars'
 import TagList from './TagList'
 import { useFavSummaries, getFavSummary } from '../favSummaries'
-import { tagToken } from '../util'
+import { tagToken, isTokiCode } from '../util'
 import { CheckIcon, PauseIcon, PlayIcon, DownloadIcon, SyncIcon, FavoriteIcon } from './icons'
 
 // A favorite that isn't downloaded yet (hitomi numeric code or toki http url),
 // shown inside the unified favorites grid alongside local work cards. Clicking
 // opens it online; the download button pulls it into the library.
 export default function OnlineFavCard({ fav, layout }: { fav: OnlineFav; layout: 'grid' | 'list' }): JSX.Element {
-  const isToki = /^https?:/.test(fav.code)
+  const isToki = isTokiCode(fav.code)
   const openOnline = useStore((s) => s.openOnline)
   const openToki = useStore((s) => s.openToki)
   const startDownload = useStore((s) => s.startDownload)
@@ -124,9 +124,7 @@ export default function OnlineFavCard({ fav, layout }: { fav: OnlineFav; layout:
             tags={tags}
             favoriteTags={favoriteTags}
             onTagClick={(t) => addSearchToken(tagToken(t))}
-            singleLine={false}
             lines={isToki ? 2 : 5}
-            max={6}
           />
         )}
       </div>

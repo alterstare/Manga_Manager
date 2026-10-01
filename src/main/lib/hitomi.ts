@@ -6,6 +6,8 @@ import { lookup as systemLookup } from 'dns'
 import type { LookupAddress } from 'dns'
 import type { HitomiMeta } from '../../shared/types'
 import { fillNamePattern, langCode } from '../../shared/pattern'
+import { titleSim } from '../../shared/title'
+import { dohAnswers } from './doh'
 
 // hitomi.la crawler. Algorithm mirrors the maintained `node-hitomi` library:
 //   - gallery metadata: GET ltn.hitomi.la/galleries/{id}.js  (strip "var galleryinfo = ")
@@ -41,9 +43,6 @@ export function setHitomiContentHost(v: string): void {
     .replace(/\/+$/, '')
   // Entered the site itself (hitomi.la) → use the current CDN host.
   CONTENT_HOST = /(^|\.)hitomi\.la$/i.test(h) ? DEFAULT_CDN : h
-}
-export function hitomiOnlineReady(): boolean {
-  return !!CONTENT_HOST
 }
 // Base for ltn.* endpoints; throws a clear error when the host isn't configured.
 function ltn(): string {
@@ -104,35 +103,10 @@ interface ImageContext {
 const dohCache = new Map<string, { ip: string; at: number }>()
 const DOH_TTL = 10 * 60 * 1000
 
-function dohQuery(host: string): Promise<string | null> {
-  return new Promise((resolve) => {
-    const req = https.request(
-      {
-        host: '1.1.1.1', // connect by IP — no DNS needed to reach the resolver
-        servername: 'cloudflare-dns.com',
-        path: `/dns-query?name=${encodeURIComponent(host)}&type=A`,
-        headers: { accept: 'application/dns-json' },
-        port: 443,
-        method: 'GET'
-      },
-      (res) => {
-        const chunks: Buffer[] = []
-        res.on('data', (c) => chunks.push(c as Buffer))
-        res.on('end', () => {
-          try {
-            const j = JSON.parse(Buffer.concat(chunks).toString('utf8'))
-            const answers = (j.Answer ?? []).filter((a: any) => a.type === 1)
-            resolve(answers.length ? answers[answers.length - 1].data : null)
-          } catch {
-            resolve(null)
-          }
-        })
-      }
-    )
-    req.on('error', () => resolve(null))
-    req.setTimeout(8000, () => req.destroy())
-    req.end()
-  })
+// Last A record of `host` via DoH (after any CNAME chain).
+async function dohQuery(host: string): Promise<string | null> {
+  const a = (await dohAnswers(host, 'A')).filter((x) => x.type === 1)
+  return a.length ? a[a.length - 1].data : null
 }
 
 async function resolveDoh(host: string): Promise<string | null> {
@@ -857,34 +831,6 @@ export async function summary(code: string): Promise<{
 
 export type Summary = Awaited<ReturnType<typeof summary>>
 
-// Title normalization for cross-language matching: strip bracket groups, lower,
-// keep alphanumerics + Japanese kana/kanji + Hangul, collapse spaces.
-const TITLE_BRACKET = /[[(（【「『〔［{][^\])）】」』〕］}]*[\])）】」』〕］}]/g
-function titleNorm(t: string): string {
-  return t
-    .replace(TITLE_BRACKET, ' ')
-    .toLowerCase()
-    .replace(/[^0-9a-z぀-ヿ一-鿿가-힯]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-function titleTokens(t: string): Set<string> {
-  return new Set(titleNorm(t).split(' ').filter((w) => w.length >= 2))
-}
-// 0..1 similarity; containment (원제 ⊂ 원제+한글제목) scores 1.
-function titleSim(a: string, b: string): number {
-  const na = titleNorm(a)
-  const nb = titleNorm(b)
-  if (!na || !nb) return 0
-  if (na.length >= 4 && nb.length >= 4 && (na.includes(nb) || nb.includes(na))) return 1
-  const ta = titleTokens(a)
-  const tb = titleTokens(b)
-  if (!ta.size || !tb.size) return 0
-  let inter = 0
-  for (const w of ta) if (tb.has(w)) inter++
-  return inter / Math.min(ta.size, tb.size)
-}
-
 async function summaryOrNull(code: string): Promise<Summary | null> {
   try {
     return await summary(code)
@@ -928,7 +874,7 @@ export async function findKorean(payload: {
         const sums = await Promise.all(batch.map((id) => summaryOrNull(String(id))))
         for (const s of sums) {
           if (!s) continue
-          const score = titleSim(payload.title, s.title)
+          const score = titleSim(payload.title, s.title, 'loose')
           if (score >= 0.34) scored.push({ s, score })
         }
       }

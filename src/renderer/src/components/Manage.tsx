@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { JSX } from 'react'
 import type { Work } from '../../../shared/types'
-import { useStore } from '../store'
+import { useStore, useSeriesRoots } from '../store'
 import { findDuplicateGroups, findTranslationPairs, pickKeeper } from '../dups'
 import { groupSeries } from '../util'
 import type { SeriesGroup } from '../util'
@@ -69,12 +69,7 @@ function MergeSeries(): JSX.Element {
   const works = useStore((s) => s.works)
   const upsertWork = useStore((s) => s.upsertWork)
   const openTab = useStore((s) => s.openTab)
-  const normalRootsSetting = useStore((s) => s.settings.normalRoots)
-  const normalFav = useStore((s) => s.settings.normalFavoritesDir)
-  const roots = useMemo(
-    () => [...(normalRootsSetting ?? []), normalFav].filter(Boolean) as string[],
-    [normalRootsSetting, normalFav]
-  )
+  const roots = useSeriesRoots()
   const [busy, setBusy] = useState<string | null>(null)
 
   const candidates = useMemo(() => {

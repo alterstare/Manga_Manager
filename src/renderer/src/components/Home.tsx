@@ -1,8 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { JSX } from 'react'
-import { useStore } from '../store'
-import { selectWorks, SORT_LABELS, groupSeries, matchesSearch, tagTokens, tokenLabel, favListNames, matchesFavList, analyzeSeries, CHAP_FAV_PREFIX, FAV_BASE, titleKey, type SeriesGroup } from '../util'
-import type { SortMode, Work, OnlineFav } from '../../../shared/types'
+import { useStore, useSeriesRoots } from '../store'
+import { selectWorks, SORT_LABELS, groupSeries, matchesSearch, tagTokens, tokenLabel, analyzeSeries, CHAP_FAV_PREFIX, FAV_BASE, titleKey, type SeriesGroup, isTokiCode, sortSeries } from '../util'
+import type { SortMode } from '../../../shared/types'
+import type { Filter } from '../store'
 import { langCategory, LANG_CAT_LABELS, type LangCat } from '../../../shared/lang'
 import Caret from './Caret'
 import { SearchIcon, SyncIcon, GridIcon, MenuIcon, FavoriteIcon } from './icons'
@@ -12,10 +13,11 @@ import WorkGridCard from './WorkGridCard'
 import SeriesCard from './SeriesCard'
 import SeriesGridCard from './SeriesGridCard'
 import OnlineFavCard from './OnlineFavCard'
-import FavDlToggle from './FavDlToggle'
+import FavDlToggle, { FavSortSelect } from './FavDlToggle'
 import TagSearchInput from './TagSearchInput'
 import Pager from './Pager'
 import ConfirmModal from './ConfirmModal'
+import { mergeFavorites, type FavEntry } from '../favorites'
 
 export default function Home(): JSX.Element {
   const works = useStore((s) => s.works)
@@ -110,6 +112,11 @@ export default function Home(): JSX.Element {
   const favSort = useStore((s) => s.favSort)
   const setFavSort = useStore((s) => s.setFavSort)
   const [newGroup, setNewGroup] = useState('')
+  const submitNewGroup = async (): Promise<void> => {
+    if (!newGroup.trim()) return
+    await createGroup(newGroup)
+    setNewGroup('')
+  }
   const [loadingPopular, setLoadingPopular] = useState(false)
 
   // Load site popularity ranks the first time the user sorts by 인기순.
@@ -186,7 +193,7 @@ export default function Home(): JSX.Element {
     () =>
       new Set(
         Object.values(onlineFavs)
-          .filter((f) => f.favorite && /^https?:/.test(f.code))
+          .filter((f) => f.favorite && isTokiCode(f.code))
           .map((f) => titleKey(f.title))
           .filter(Boolean)
       ),
@@ -209,7 +216,7 @@ export default function Home(): JSX.Element {
     if (favActive && filter.kind === 'favorites') {
       const onlineCodes = new Set(
         Object.values(onlineFavs)
-          .filter((f) => f.favorite && !/^https?:/.test(f.code))
+          .filter((f) => f.favorite && !isTokiCode(f.code))
           .map((f) => f.code)
       )
       const have = new Set(base.map((w) => w.id))
@@ -225,10 +232,7 @@ export default function Home(): JSX.Element {
 
   // Normal mode: collapse chapters into one entry per series.
   const normal = libraryMode === 'normal'
-  const normalRoots = useMemo(
-    () => [...(settings.normalRoots ?? []), settings.normalFavoritesDir].filter(Boolean) as string[],
-    [settings.normalRoots, settings.normalFavoritesDir]
-  )
+  const normalRoots = useSeriesRoots()
   // Whole-mode series count (ignores the fav filter) for the 전체 chip.
   const seriesTotal = useMemo(
     () => (normal ? groupSeries(modeWorks, normalRoots).length : 0),
@@ -266,37 +270,7 @@ export default function Home(): JSX.Element {
       }
       arr = [...favGroups, ...chapEntries]
     }
-    const recentOf = (s: (typeof arr)[number]): number => Math.max(...s.chapters.map((c) => c.mtime))
-    const viewedOf = (s: (typeof arr)[number]): number =>
-      Math.max(0, ...s.chapters.map((c) => c.lastViewedAt ?? 0))
-    const sumViews = (s: (typeof arr)[number]): number => s.chapters.reduce((n, c) => n + c.viewCount, 0)
-    const maxRank = (s: (typeof arr)[number]): number => Math.max(0, ...s.chapters.map((c) => c.rank))
-    if (sort === 'recent') arr = [...arr].sort((a, b) => recentOf(b) - recentOf(a))
-    else if (sort === 'viewed') arr = [...arr].sort((a, b) => viewedOf(b) - viewedOf(a))
-    else if (sort === 'title')
-      arr = [...arr].sort((a, b) => a.title.localeCompare(b.title, undefined, { numeric: true, sensitivity: 'base' }))
-    else if (sort === 'views') arr = [...arr].sort((a, b) => sumViews(b) - sumViews(a))
-    else if (sort === 'rank') arr = [...arr].sort((a, b) => maxRank(b) - maxRank(a))
-    else if (sort === 'artist') {
-      const artistOf = (s: (typeof arr)[number]): string => s.chapters.find((c) => c.artist)?.artist?.trim() ?? ''
-      arr = [...arr].sort((a, b) => {
-        const ka = artistOf(a)
-        const kb = artistOf(b)
-        if (!ka && !kb) return a.title.localeCompare(b.title, undefined, { numeric: true, sensitivity: 'base' })
-        if (!ka) return 1
-        if (!kb) return -1
-        return ka.localeCompare(kb, undefined, { numeric: true, sensitivity: 'base' })
-      })
-    }
-    // random / popular → natural order
-    if (sortDir === 'asc') {
-      arr = [...arr].reverse()
-      if (sort === 'artist') {
-        const has = (s: (typeof arr)[number]): boolean => !!s.chapters.find((c) => c.artist)?.artist?.trim()
-        arr = [...arr.filter(has), ...arr.filter((s) => !has(s))]
-      }
-    }
-    return arr
+    return sortSeries(arr, sort, sortDir)
   }, [
     normal,
     categoryWorks,
@@ -311,58 +285,39 @@ export default function Home(): JSX.Element {
     onlineNormalFavKeys
   ])
 
-  // Unified favorites: in the favorites view, online favorites that aren't already
-  // downloaded appear as online cards after the local cards. "받음" toggle hides
-  // them. Per mode: hitomi = numeric codes, general-manga = http (toki) codes.
-  // Title keys of every local general-manga series (downloaded), to dedupe online
-  // favorites that are already in the library.
+  // Title keys of every local general-manga series, to drop online (toki)
+  // favorites that are already downloaded.
   const localSeriesKeys = useMemo(
     () => (normal ? new Set(groupSeries(modeWorks, normalRoots).map((g) => titleKey(g.title))) : new Set<string>()),
     [normal, modeWorks, normalRoots]
   )
+  // Unified favorites view: online favorites NOT in the library show as online
+  // cards next to the local ones ("다운로드한 것만" toggle hides them). Per mode:
+  // hitomi = numeric codes, general manga = toki urls (matched by title).
   const onlineOnlyFavs = useMemo(() => {
     if (!favActive || favDownloadedOnly) return []
+    // Only with 기본 (the hearts) checked — imported lists show downloaded works only.
+    if (filter.kind === 'favlists' && !filter.value.includes(FAV_BASE)) return []
     const libCodes = new Set(works.map((w) => w.code).filter(Boolean) as string[])
     return Object.values(onlineFavs)
       .filter(
         (f) =>
           f.favorite &&
-          /^https?:/.test(f.code) === normal &&
+          isTokiCode(f.code) === normal &&
           !libCodes.has(f.code) &&
           !(normal && localSeriesKeys.has(titleKey(f.title)))
       )
       .sort((a, b) => (favSort === 'rank' ? b.rank - a.rank || b.addedAt - a.addedAt : b.addedAt - a.addedAt))
-  }, [favActive, favDownloadedOnly, onlineFavs, works, normal, favSort, localSeriesKeys])
-  // One merged favorites list (local works / series + online-only), sorted together
-  // by when each was favorited (최근 추가순) or by rating (평점 높은순), then paged.
-  type FavEntry =
-    | { kind: 'local'; work: Work; t: number; r: number }
-    | { kind: 'series'; series: SeriesGroup; t: number; r: number }
-    | { kind: 'online'; fav: OnlineFav; t: number; r: number }
-  const favMerged = useMemo<FavEntry[] | null>(() => {
-    if (!favActive) return null
-    const arr: FavEntry[] = []
-    if (!normal) {
-      for (const w of list) {
-        const of = w.code ? onlineFavs[w.code] : undefined
-        arr.push({ kind: 'local', work: w, t: of?.addedAt ?? w.favoritedAt ?? 0, r: Math.max(w.rank, of?.rank ?? 0) })
-      }
-    } else {
-      const at = settings.normalFavAt ?? {}
-      const byTitle = new Map<string, OnlineFav>()
-      for (const f of Object.values(onlineFavs))
-        if (f.favorite && /^https?:/.test(f.code)) byTitle.set(titleKey(f.title), f)
-      for (const sg of seriesList) {
-        const key = sg.key.startsWith(CHAP_FAV_PREFIX) ? sg.key.slice(CHAP_FAV_PREFIX.length) : sg.key
-        const of = byTitle.get(titleKey(sg.title))
-        const r = Math.max(0, ...sg.chapters.map((c) => c.rank), of?.rank ?? 0)
-        arr.push({ kind: 'series', series: sg, t: at[key] ?? of?.addedAt ?? 0, r })
-      }
-    }
-    for (const f of onlineOnlyFavs) arr.push({ kind: 'online', fav: f, t: f.addedAt, r: f.rank })
-    arr.sort((a, b) => (favSort === 'rank' ? b.r - a.r || b.t - a.t : b.t - a.t))
-    return arr
-  }, [favActive, normal, list, seriesList, onlineOnlyFavs, onlineFavs, favSort, settings.normalFavAt])
+  }, [favActive, favDownloadedOnly, filter, onlineFavs, works, normal, favSort, localSeriesKeys])
+  // One merged favorites list (local works / series + online-only), sorted
+  // together by favorite time (최근 추가순) or rating (평점 높은순), then paged.
+  const favMerged = useMemo(
+    () =>
+      favActive
+        ? mergeFavorites({ normal, works: list, series: seriesList, onlineOnly: onlineOnlyFavs, onlineFavs, normalFavAt: settings.normalFavAt ?? {}, sort: favSort })
+        : null,
+    [favActive, normal, list, seriesList, onlineOnlyFavs, onlineFavs, favSort, settings.normalFavAt]
+  )
 
   const pageSize = settings.pageSize || 50
   const [page, setPage] = useState(() => useStore.getState().homePage)
@@ -408,39 +363,37 @@ export default function Home(): JSX.Element {
   useEffect(() => {
     if (page > lastPage) setPage(lastPage)
   }, [lastPage, page])
-  const pageItems = useMemo(
-    () => list.slice(page * pageSize, page * pageSize + pageSize),
-    [list, page, pageSize]
-  )
-  const pageFav = useMemo(
-    () => (favMerged ? favMerged.slice(page * pageSize, page * pageSize + pageSize) : null),
-    [favMerged, page, pageSize]
-  )
-  const pageSeries = useMemo(
-    () => seriesList.slice(page * pageSize, page * pageSize + pageSize),
-    [seriesList, page, pageSize]
-  )
+  // The current page as card entries: the merged favorites list, or plain
+  // series (general manga) / works (hitomi).
+  const pageEntries = useMemo<FavEntry[]>(() => {
+    const at = page * pageSize
+    if (favMerged) return favMerged.slice(at, at + pageSize)
+    if (normal) return seriesList.slice(at, at + pageSize).map((series) => ({ kind: 'series', series, t: 0, r: 0 }))
+    return list.slice(at, at + pageSize).map((work) => ({ kind: 'local', work, t: 0, r: 0 }))
+  }, [favMerged, normal, seriesList, list, page, pageSize])
 
   const artistCount = useMemo(
     () => new Set(modeWorks.map((w) => w.artist).filter(Boolean)).size,
     [modeWorks]
   )
-  // Persisted list names (settings) unioned with any present on works.
-  const favLists = useMemo(() => {
-    // Imported favlist names (settings.favLists) are a hitomi-only feature, so
-    // don't leak them into the general-manga (normal) drawer. Normal mode only
-    // shows lists actually present on its own works.
-    const imported = libraryMode === 'hitomi' ? (settings.favLists ?? []) : []
-    return [...new Set([...imported, ...favListNames(modeWorks)])].sort((a, b) => a.localeCompare(b))
-  }, [settings.favLists, modeWorks, libraryMode])
-  // All selectable favorite lists (기본 + imported). The drawer defaults to ALL
-  // checked; `favUnchecked` tracks the ones the user explicitly turned off, so a
-  // newly-imported list shows up checked automatically.
-  const allFavNames = useMemo(() => [FAV_BASE, ...favLists], [favLists])
+  // Favorites drawer: 기본 (the hearts) + imported favorite lists (gallery
+  // codes — hitomi only). All checked by default; `favUnchecked` tracks the
+  // ones the user turned off, so a newly imported list shows up checked.
+  const favLists = useMemo(
+    () => (libraryMode === 'hitomi' ? (settings.onlineFavLists ?? []) : []),
+    [settings.onlineFavLists, libraryMode]
+  )
+  const allFavNames = useMemo(() => [FAV_BASE, ...favLists.map((l) => l.name)], [favLists])
   const favSelected = useMemo(
     () => allFavNames.filter((n) => !favUnchecked.includes(n)),
     [allFavNames, favUnchecked]
   )
+  // Filter for a drawer selection: just the hearts when there are no lists,
+  // else the checked names + the union of the checked lists' codes.
+  const favFilterFor = (sel: string[]): Filter =>
+    favLists.length === 0 && sel.includes(FAV_BASE)
+      ? { kind: 'favorites' }
+      : { kind: 'favlists', value: sel, codes: favLists.filter((l) => sel.includes(l.name)).flatMap((l) => l.codes) }
   // Count reflects the checked selection (updates as lists are toggled). Normal
   // mode counts its in-app favorites (series + standalone chapters) instead.
   // Unified favorite count: local + online favorites, each favorite counted once.
@@ -451,11 +404,14 @@ export default function Home(): JSX.Element {
       for (const g of groupSeries(modeWorks, normalRoots)) if (favS.includes(g.key)) keys.add(titleKey(g.title))
       return keys.size + (settings.normalFavChapters?.length ?? 0)
     }
+    // Hearts (list entries + uncoded local hearts) plus checked lists' downloaded works.
+    const base = favSelected.includes(FAV_BASE)
+    const codes = new Set(favLists.filter((l) => favSelected.includes(l.name)).flatMap((l) => l.codes))
     const ids = new Set<string>()
-    for (const w of modeWorks) if (favSelected.some((n) => matchesFavList(w, n))) ids.add(w.code ?? w.id)
-    for (const f of Object.values(onlineFavs)) if (f.favorite && !/^https?:/.test(f.code)) ids.add(f.code)
+    for (const w of modeWorks) if ((base && w.favorite) || (w.code && codes.has(w.code))) ids.add(w.code ?? w.id)
+    if (base) for (const f of Object.values(onlineFavs)) if (f.favorite && !isTokiCode(f.code)) ids.add(f.code)
     return ids.size
-  }, [normal, modeWorks, normalRoots, favSelected, onlineFavs, onlineNormalFavKeys, settings.normalFavSeries, settings.normalFavChapters])
+  }, [normal, modeWorks, normalRoots, favSelected, favLists, onlineFavs, onlineNormalFavKeys, settings.normalFavSeries, settings.normalFavChapters])
   const groupCounts = useMemo(() => {
     const m: Record<string, number> = {}
     for (const w of modeWorks) for (const id of w.groups ?? []) m[id] = (m[id] ?? 0) + 1
@@ -526,7 +482,7 @@ export default function Home(): JSX.Element {
                 onClick={() => {
                   // Show everything: re-check all lists.
                   setFavUnchecked([])
-                  setFilter({ kind: 'favorites' })
+                  setFilter(favFilterFor(allFavNames))
                 }}
               >
                 <FavoriteIcon filled className="fav-ico" /> 즐겨찾기 {favCount}
@@ -548,13 +504,7 @@ export default function Home(): JSX.Element {
                           : [...favUnchecked, n]
                         setFavUnchecked(nextUnchecked)
                         const sel = allFavNames.filter((x) => !nextUnchecked.includes(x))
-                        // All checked → plain 'favorites' (also drives normal mode);
-                        // a subset (incl. none) → 'favlists' so unchecked lists hide.
-                        setFilter(
-                          sel.length === allFavNames.length
-                            ? { kind: 'favorites' }
-                            : { kind: 'favlists', value: sel }
-                        )
+                        setFilter(favFilterFor(sel))
                       }}
                     />
                     ★ {n}
@@ -571,17 +521,7 @@ export default function Home(): JSX.Element {
               offTitle="모든 즐겨찾기 보는 중"
             />
           )}
-          {favActive && (
-            <Dropdown<'rank' | 'recent'>
-              className="field sm"
-              value={favSort}
-              onChange={setFavSort}
-              options={[
-                ['rank', '평점 높은순'],
-                ['recent', '최근 추가순']
-              ]}
-            />
-          )}
+          {favActive && <FavSortSelect value={favSort} onChange={setFavSort} />}
           {!normal && <span className="chip-stat">작가 {artistCount}</span>}
 
           {!normal && (
@@ -678,22 +618,9 @@ export default function Home(): JSX.Element {
                     value={newGroup}
                     placeholder="새 그룹 이름"
                     onChange={(e) => setNewGroup(e.target.value)}
-                    onKeyDown={async (e) => {
-                      if (e.key === 'Enter' && newGroup.trim()) {
-                        await createGroup(newGroup)
-                        setNewGroup('')
-                      }
-                    }}
+                    onKeyDown={(e) => e.key === 'Enter' && submitNewGroup()}
                   />
-                  <button
-                    className="mini"
-                    onClick={async () => {
-                      if (newGroup.trim()) {
-                        await createGroup(newGroup)
-                        setNewGroup('')
-                      }
-                    }}
-                  >
+                  <button className="mini" onClick={submitNewGroup}>
                     + 그룹 생성
                   </button>
                 </div>
@@ -761,46 +688,19 @@ export default function Home(): JSX.Element {
         </div>
       )}
 
-      {pageFav ? (
-        // Unified favorites: local / series / online cards interleaved in one order.
-        <div className={homeLayout === 'grid' ? 'work-grid' : normal ? 'series-list' : 'work-list'}>
-          {pageFav.map((e) =>
-            e.kind === 'local' ? (
-              homeLayout === 'grid' ? <WorkGridCard key={e.work.id} work={e.work} /> : <WorkCard key={e.work.id} work={e.work} />
-            ) : e.kind === 'series' ? (
-              homeLayout === 'grid' ? <SeriesGridCard key={e.series.key} series={e.series} /> : <SeriesCard key={e.series.key} series={e.series} />
-            ) : (
-              <OnlineFavCard key={e.fav.code} fav={e.fav} layout={homeLayout === 'grid' ? 'grid' : 'list'} />
-            )
-          )}
-        </div>
-      ) : normal ? (
-        homeLayout === 'grid' ? (
-          <div className="work-grid">
-            {pageSeries.map((s) => (
-              <SeriesGridCard key={s.key} series={s} />
-            ))}
-          </div>
-        ) : (
-          <div className="series-list">
-            {pageSeries.map((s) => (
-              <SeriesCard key={s.key} series={s} />
-            ))}
-          </div>
-        )
-      ) : homeLayout === 'grid' ? (
-        <div className="work-grid">
-          {pageItems.map((w) => (
-            <WorkGridCard key={w.id} work={w} />
-          ))}
-        </div>
-      ) : (
-        <div className="work-list">
-          {pageItems.map((w) => (
-            <WorkCard key={w.id} work={w} />
-          ))}
-        </div>
-      )}
+      {/* One card list for every view. Card type follows the entry kind; the
+          container class follows the layout (+ series list styling in normal mode). */}
+      <div className={homeLayout === 'grid' ? 'work-grid' : normal ? 'series-list' : 'work-list'}>
+        {pageEntries.map((e) =>
+          e.kind === 'local' ? (
+            homeLayout === 'grid' ? <WorkGridCard key={e.work.id} work={e.work} /> : <WorkCard key={e.work.id} work={e.work} />
+          ) : e.kind === 'series' ? (
+            homeLayout === 'grid' ? <SeriesGridCard key={e.series.key} series={e.series} /> : <SeriesCard key={e.series.key} series={e.series} />
+          ) : (
+            <OnlineFavCard key={e.fav.code} fav={e.fav} layout={homeLayout === 'grid' ? 'grid' : 'list'} />
+          )
+        )}
+      </div>
 
       {total > pageSize && (
         <Pager

@@ -79,7 +79,12 @@ export interface HitomiMeta {
 
 export interface Settings {
   libraryRoots: string[]
+  // Hitomi favorites folder. With favoriteMoveToFolder, hearting a work moves its
+  // folder in here (and back on unheart). A work newly found in this folder by a
+  // scan is added to the favorites. The heart itself is NOT derived from the
+  // location — see the favorites model in main/lib/favoriteSync.ts.
   favoritesDir: string | null
+  favoriteMoveToFolder: boolean
   downloadDir: string | null
   // Preferred image encoding when downloading hitomi galleries. webp is more
   // widely supported by other viewers; avif is smaller. Falls back per-page when
@@ -98,10 +103,9 @@ export interface Settings {
   flattenCollectThreshold: number
   // Manual merges the user made in the collection manager (survive rescans).
   manualCollections: ManualCollection[]
-  normalFavoritesDir: string | null
   // Where general-manga online downloads land. Kept separate from the hitomi
   // downloadDir so online manga/webtoon don't leak into the hitomi library.
-  // Falls back to normalFavoritesDir / first normalRoot when unset.
+  // Falls back to the first normalRoot when unset.
   normalDownloadDir: string | null
   // Where extracted-text (.txt) exports are written. When unset, exporting errors
   // and asks the user to pick a folder in Settings.
@@ -166,11 +170,8 @@ export interface Settings {
   thumbHoverPreview: boolean
   // UI color theme. 'light' = Kraken light (default), 'dark' = dark variant.
   theme: 'light' | 'dark'
-  // Names of imported favorite lists (favlist:<name> tag). Persisted so the list
-  // shows in Settings / the home favorites drawer even before any match.
-  favLists: string[]
-  // Imported ONLINE favorite lists: each file → { name, codes }. Browsed in the
-  // online view, filtered by list (codes not necessarily in the local library).
+  // Favorite lists imported from files: { name, gallery codes }. The online
+  // favorites view shows every code; the library view shows the downloaded ones.
   onlineFavLists: { name: string; codes: string[] }[]
   // Tags auto-excluded from every online SEARCH. Stored as tokens (`female:x`,
   // `tag:y`, …, spaces→'_'). Applied silently as negative (-) tokens — they are
@@ -227,6 +228,10 @@ export interface Settings {
   // One-time flag: existing folder-moved normal favorites were un-favorited and
   // moved back to their origin when migrating to the in-app list system.
   normalFavMigrated: boolean
+  // One-time flag: local hearts were copied into the favorites list, favlist:
+  // tags converted to code lists and the old general-manga favorites folder
+  // setting dropped (main/lib/favoriteSync.ts migrateFavorites).
+  favoritesUnified: boolean
   // User-defined hitomi folder-name patterns for locating the gallery id. Tokens:
   //   -id-     gallery id (digits) — REQUIRED; a pattern without it is ignored
   //   -title-  work title   -artist- artist   -group- circle/group
@@ -304,13 +309,13 @@ export interface ParsedName {
 export const DEFAULT_SETTINGS: Settings = {
   libraryRoots: [],
   favoritesDir: null,
+  favoriteMoveToFolder: true,
   downloadDir: null,
   downloadImageFormat: 'avif',
   normalRoots: [],
   flattenRoots: [],
   flattenCollectThreshold: 1,
   manualCollections: [],
-  normalFavoritesDir: null,
   normalDownloadDir: null,
   textExportDir: null,
   deletedDir: null,
@@ -347,7 +352,6 @@ export const DEFAULT_SETTINGS: Settings = {
   homeLayout: 'grid',
   thumbHoverPreview: true,
   theme: 'light',
-  favLists: [],
   onlineFavLists: [],
   onlineExcludeTags: [],
   searchHistoryEnabled: true,
@@ -374,6 +378,7 @@ export const DEFAULT_SETTINGS: Settings = {
   normalFavSeries: [],
   normalFavChapters: [],
   normalFavMigrated: false,
+  favoritesUnified: false,
   hitomiNamePatterns: [...DEFAULT_HITOMI_PATTERNS],
   hitomiDownloadPatternIdx: 0,
   maxConcurrentDownloads: 2

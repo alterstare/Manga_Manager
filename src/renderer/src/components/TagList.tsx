@@ -1,6 +1,17 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { JSX, MouseEvent } from 'react'
 
+// Tag chips for a card, always showing WHOLE tags (never cut mid-tag): the ones
+// that don't fit hide behind a "+N" chip (click to expand, "접기" to collapse).
+// Favorite tags sort first; manual tags get an × when onRemove is given.
+//
+// Two layouts:
+//   line (default) — list cards: one line, +N / + 태그 pinned at its end
+//   lines={n}      — grid cards: up to n rows, sized to the parent box (which
+//                    may shrink, e.g. when a long artist list takes rows); the
+//                    buttons are budgeted into the last row
+// Both measure real chip widths (hidden ones are briefly laid out with a
+// "measuring" class) and re-measure on resize.
 interface Props {
   tags: string[]
   favoriteTags?: string[]
@@ -8,15 +19,13 @@ interface Props {
   onTagClick?: (t: string) => void
   onTagContext?: (t: string, e: MouseEvent) => void
   onRemove?: (t: string) => void
-  onAddClick?: () => void
-  max?: number
-  // Single-line (list cards): fit whole tags on one line, rest behind +N.
-  // Off (grid cards): show up to `max`, wrapping to multiple rows (original behavior).
-  singleLine?: boolean
-  // Grid cards: fit whole tags into exactly this many rows (measured), keeping the
-  // +N / + 태그 buttons inside the last row. Overrides `max`.
+  onAddClick?: () => void // shows "+ 태그"
   lines?: number
 }
+
+const ROW_H = 24 // grid tag height (px), see .taglist-grid .mtag
+const GRID_GAP = 4
+const LINE_GAP = 6
 
 export default function TagList({
   tags,
@@ -26,8 +35,6 @@ export default function TagList({
   onTagContext,
   onRemove,
   onAddClick,
-  max = 8,
-  singleLine = true,
   lines
 }: Props): JSX.Element {
   const [expanded, setExpanded] = useState(false)
@@ -36,24 +43,20 @@ export default function TagList({
   const [boxH, setBoxH] = useState(0)
   const ref = useRef<HTMLDivElement>(null)
   const btnsRef = useRef<HTMLSpanElement>(null)
+  const rowFit = !!lines
 
-  const norm = (s: string): string =>
-    s.toLowerCase().replace(/^[^:]+:/, '').replace(/_/g, ' ').trim()
+  // Favorite match ignores the namespace ("female:x" ≈ "x") and _ vs space.
+  const norm = (s: string): string => s.toLowerCase().replace(/^[^:]+:/, '').replace(/_/g, ' ').trim()
   const favSet = new Set(favoriteTags.map(norm))
   const isFav = (t: string): boolean => favSet.has(norm(t))
-  // Favorite tags float to the front (stable within each group).
-  const ordered = [...tags].sort((a, b) => Number(isFav(b)) - Number(isFav(a)))
+  const ordered = [...tags].sort((a, b) => Number(isFav(b)) - Number(isFav(a))) // stable
 
-  const rowFit = !singleLine && !!lines
-  const measured = singleLine || rowFit
-
+  // Re-measure on width changes (and, for grids, on the parent box's height).
   useEffect(() => {
-    if (!measured) return
     const el = ref.current
     if (!el) return
     const ro = new ResizeObserver(([e]) => setWidth(Math.round(e.contentRect.width)))
     ro.observe(el)
-    // Grid: the tag box can shrink (multi-line artist eats rows) — track its height.
     const box = rowFit ? el.parentElement : null
     const ro2 = new ResizeObserver(() => box && setBoxH(box.clientHeight))
     if (box) ro2.observe(box)
@@ -61,28 +64,27 @@ export default function TagList({
       ro.disconnect()
       ro2.disconnect()
     }
-  }, [measured])
+  }, [rowFit])
 
-  // Grid row-fit: simulate the wrap of tags (+ buttons) at the measured widths and
-  // keep the largest prefix that fits in `lines` rows.
+  // Grid: simulate the wrap of tags (+ buttons) at their measured widths and keep
+  // the largest prefix that fits in the rows available.
   useLayoutEffect(() => {
     if (!rowFit || expanded) return
     const el = ref.current
     if (!el) return
     el.classList.add('measuring')
     const cw = el.clientWidth
-    const gap = 4
     const tagW = Array.from(el.querySelectorAll<HTMLElement>('.mtag')).map((x) => Math.min(x.offsetWidth, cw))
     const moreW = el.querySelector<HTMLElement>('.more-measure')?.offsetWidth ?? 0
     const addW = el.querySelector<HTMLElement>('.add-btn')?.offsetWidth ?? 0
     el.classList.remove('measuring')
-    // Rows that actually fit the (possibly shrunk) tag box, capped at `lines`.
+    // Rows that fit the (possibly shrunk) parent box, capped at `lines`.
     let maxRows = lines ?? 1
     const box = el.parentElement
     if (box) {
       const cs = getComputedStyle(box)
       const inner = box.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom)
-      maxRows = Math.max(0, Math.min(maxRows, Math.floor((inner + gap) / (24 + gap))))
+      maxRows = Math.max(0, Math.min(maxRows, Math.floor((inner + GRID_GAP) / (ROW_H + GRID_GAP))))
     }
     if (maxRows === 0) {
       setVisible(0)
@@ -90,12 +92,12 @@ export default function TagList({
     }
     const fits = (n: number): boolean => {
       const items = tagW.slice(0, n)
-      if (n < tagW.length) items.push(moreW)
+      if (n < tagW.length) items.push(moreW) // "+N" needed
       if (addW) items.push(addW)
       let rows = 1
       let x = 0
       for (const w of items) {
-        const nx = x === 0 ? w : x + gap + w
+        const nx = x === 0 ? w : x + GRID_GAP + w
         if (nx <= cw) x = nx
         else {
           rows++
@@ -110,40 +112,36 @@ export default function TagList({
     setVisible(n)
   }, [tags, expanded, width, boxH, rowFit, lines, onAddClick])
 
+  // Line: as many whole tags as fit before the buttons.
   useLayoutEffect(() => {
-    if (!singleLine || expanded) return
+    if (rowFit || expanded) return
     const el = ref.current
-    if (!el) {
-      return
-    }
+    if (!el) return
     el.classList.add('measuring')
     const cw = el.clientWidth
-    const gap = 6
-    const tagEls = Array.from(el.querySelectorAll<HTMLElement>('.mtag'))
     const btnsW = btnsRef.current?.offsetWidth ?? 0
     let used = 0
     let count = 0
-    for (let i = 0; i < tagEls.length; i++) {
-      const tw = tagEls[i].offsetWidth
-      const add = tw + (count > 0 ? gap : 0)
-      if (used + add + gap + btnsW > cw) break
+    for (const t of Array.from(el.querySelectorAll<HTMLElement>('.mtag'))) {
+      const add = t.offsetWidth + (count > 0 ? LINE_GAP : 0)
+      if (used + add + LINE_GAP + btnsW > cw) break
       used += add
       count++
     }
     el.classList.remove('measuring')
     setVisible(count)
-  }, [tags, expanded, width, singleLine])
+  }, [tags, expanded, width, rowFit])
 
-  const tagSpan = (t: string, i: number, clip: boolean): JSX.Element => (
+  const stop = (fn: () => void) => (e: MouseEvent): void => {
+    e.stopPropagation()
+    fn()
+  }
+
+  const tagSpan = (t: string, clip: boolean): JSX.Element => (
     <span
       key={t}
-      className={`tag mtag ${isFav(t) ? 'fav-tag' : ''} ${
-        manualTags.includes(t) ? 'manual' : ''
-      } ${clip ? 'clipped' : ''}`}
-      onClick={(e) => {
-        e.stopPropagation()
-        onTagClick?.(t)
-      }}
+      className={`tag mtag ${isFav(t) ? 'fav-tag' : ''} ${manualTags.includes(t) ? 'manual' : ''} ${clip ? 'clipped' : ''}`}
+      onClick={stop(() => onTagClick?.(t))}
       onContextMenu={
         onTagContext
           ? (e) => {
@@ -156,97 +154,50 @@ export default function TagList({
     >
       {t}
       {onRemove && manualTags.includes(t) && (
-        <span
-          className="tag-x"
-          onClick={(e) => {
-            e.stopPropagation()
-            onRemove(t)
-          }}
-        >
+        <span className="tag-x" onClick={stop(() => onRemove(t))}>
           ×
         </span>
       )}
     </span>
   )
 
-  // Grid cards, row-fit: whole tags in `lines` rows; buttons always on the last row.
-  if (rowFit) {
-    const hidden = ordered.length - visible
-    return (
-      <div ref={ref} className={`taglist-grid ${expanded ? 'expanded' : ''}`}>
-        {ordered.map((t, i) => tagSpan(t, i, !expanded && i >= visible))}
-        {!expanded && hidden > 0 && (
-          <span className="tag add-tag" onClick={(e) => { e.stopPropagation(); setExpanded(true) }}>
-            +{hidden}
-          </span>
-        )}
-        <span className="tag add-tag more-measure" aria-hidden="true">
-          +00
-        </span>
-        {expanded && (
-          <span className="tag add-tag" onClick={(e) => { e.stopPropagation(); setExpanded(false) }}>
-            접기
-          </span>
-        )}
-        {onAddClick && (
-          <span className="tag add-tag add-btn" onClick={(e) => { e.stopPropagation(); onAddClick() }}>
-            + 태그
-          </span>
-        )}
-      </div>
-    )
-  }
-
-  // Grid cards: original multi-row behavior (up to `max`, +N to reveal the rest).
-  if (!singleLine) {
-    const shown = expanded ? ordered : ordered.slice(0, max)
-    const hidden = ordered.length - shown.length
-    return (
-      <>
-        {shown.map((t, i) => tagSpan(t, i, false))}
-        {!expanded && hidden > 0 && (
-          <span className="tag add-tag" onClick={(e) => { e.stopPropagation(); setExpanded(true) }}>
-            +{hidden}
-          </span>
-        )}
-        {expanded && ordered.length > max && (
-          <span className="tag add-tag" onClick={(e) => { e.stopPropagation(); setExpanded(false) }}>
-            접기
-          </span>
-        )}
-        {onAddClick && (
-          <span className="tag add-tag" onClick={(e) => { e.stopPropagation(); onAddClick() }}>
-            + 태그
-          </span>
-        )}
-      </>
-    )
-  }
-
-  // List cards: one line, whole tags only, buttons pinned on the line.
   const hidden = ordered.length - visible
-  return (
-    <div ref={ref} className={`taglist-line ${expanded ? 'expanded' : ''}`}>
-      {ordered.map((t, i) => tagSpan(t, i, !expanded && i >= visible))}
-      <span ref={btnsRef} className="taglist-btns">
-        {!expanded && hidden > 0 && (
-          <span className="tag add-tag" onClick={(e) => { e.stopPropagation(); setExpanded(true) }}>
-            +{hidden}
-          </span>
-        )}
-        <span className="tag add-tag more-measure" aria-hidden="true">
-          +00
+  // +N / 접기 / + 태그. The invisible "+00" chip is what the measurement
+  // reserves for the +N button.
+  const buttons = (
+    <>
+      {!expanded && hidden > 0 && (
+        <span className="tag add-tag" onClick={stop(() => setExpanded(true))}>
+          +{hidden}
         </span>
-        {expanded && (
-          <span className="tag add-tag" onClick={(e) => { e.stopPropagation(); setExpanded(false) }}>
-            접기
-          </span>
-        )}
-        {onAddClick && (
-          <span className="tag add-tag" onClick={(e) => { e.stopPropagation(); onAddClick() }}>
-            + 태그
-          </span>
-        )}
+      )}
+      <span className="tag add-tag more-measure" aria-hidden="true">
+        +00
+      </span>
+      {expanded && (
+        <span className="tag add-tag" onClick={stop(() => setExpanded(false))}>
+          접기
+        </span>
+      )}
+      {onAddClick && (
+        <span className="tag add-tag add-btn" onClick={stop(onAddClick)}>
+          + 태그
+        </span>
+      )}
+    </>
+  )
+  const chips = ordered.map((t, i) => tagSpan(t, !expanded && i >= visible))
+
+  return rowFit ? (
+    <div ref={ref} className={`taglist-grid ${expanded ? 'expanded' : ''}`}>
+      {chips}
+      {buttons}
+    </div>
+  ) : (
+    <div ref={ref} className={`taglist-line ${expanded ? 'expanded' : ''}`}>
+      {chips}
+      <span ref={btnsRef} className="taglist-btns">
+        {buttons}
       </span>
     </div>
   )

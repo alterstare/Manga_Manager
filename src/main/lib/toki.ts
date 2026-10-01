@@ -17,6 +17,7 @@
 import { BrowserWindow, session, app } from 'electron'
 import { promises as fs } from 'fs'
 import { join } from 'path'
+import { dohAnswers } from './doh'
 import type {
   TokiListSource,
   TokiSort,
@@ -28,7 +29,9 @@ import type {
 
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-const PARTITION = 'persist:toki'
+// Persistent session of the scraper window (keeps the Cloudflare clearance).
+export const TOKI_PARTITION = 'persist:toki'
+const PARTITION = TOKI_PARTITION
 
 const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
@@ -187,6 +190,51 @@ const probe = async (w: BrowserWindow): Promise<Probe | null> => {
 // reload — reloading re-arms the managed challenge and makes the bot window pop
 // over and over when several scrape calls queue up. The cf_clearance cookie
 // covers the whole domain, so once solved, later same-host loads pass silently.
+// --- blocked-domain fallback ---------------------------------------------------
+// Some networks reset every TLS connection that names the site's domain (SNI
+// filtering: ERR_CONNECTION_RESET while DNS is fine). The site is served by a
+// CDN under its own hostname — the domain's CNAME (e.g. sbxh9.com →
+// sbxh9f.b-cdn.net) — which isn't filtered and serves the same site. So on a
+// reset we look the CNAME up over DoH and load the page via that host instead.
+// URLs handed back to the app are mapped to the original domain again, so
+// favorites / history keep one canonical form.
+const altHost = new Map<string, string>() // blocked host → CDN host
+const altTried = new Set<string>()
+
+const mapHost = (url: string, from: (h: string) => string | undefined): string => {
+  try {
+    const u = new URL(url)
+    const to = from(u.hostname)
+    if (!to) return url
+    u.hostname = to
+    return u.href
+  } catch {
+    return url
+  }
+}
+// Address actually used to reach `url` (the CDN host once its domain is blocked).
+const toAlt = (url: string): string => mapHost(url, (h) => altHost.get(h))
+// Back to the canonical domain for anything returned to the app.
+const fromAlt = (url: string): string =>
+  mapHost(url, (h) => [...altHost].find(([, alt]) => alt === h)?.[0])
+
+// After a reset on `url`'s host: switch it to its CDN alias (once per host).
+// True when a switch happened (the caller reloads via toAlt).
+async function switchToAlt(url: string): Promise<boolean> {
+  let host: string
+  try {
+    host = new URL(url).hostname
+  } catch {
+    return false
+  }
+  if (altHost.has(host) || altTried.has(host)) return false
+  altTried.add(host)
+  const cname = (await dohAnswers(host, 'CNAME')).find((a) => a.type === 5)?.data.replace(/\.$/, '')
+  if (!cname || cname === host) return false
+  altHost.set(host, cname)
+  return true
+}
+
 // Only ERR_CONNECTION_RESET is retried: some networks reset the connection
 // intermittently (in a browser you'd just hit refresh a few times). Other
 // failures fail fast as before.
@@ -196,7 +244,8 @@ const retryDelay = (n: number): number => Math.min(400 * n, 2000)
 
 async function ensure(url: string, needContent: boolean): Promise<void> {
   const w = getWindow()
-  if (sameUrl(w.webContents.getURL(), url)) {
+  let target = toAlt(url)
+  if (sameUrl(w.webContents.getURL(), target)) {
     const p = await probe(w)
     if (p && !p.challenge && (p.ready || !needContent)) return // already good — no reload
   }
@@ -213,7 +262,7 @@ async function ensure(url: string, needContent: boolean): Promise<void> {
   const load = async (): Promise<void> => {
     failCode = 0
     const domReady = new Promise<void>((r) => w.webContents.once('dom-ready', () => r()))
-    nav = withTimeout(w.loadURL(url).then(() => undefined), 45000, undefined)
+    nav = withTimeout(w.loadURL(target).then(() => undefined), 45000, undefined)
     await Promise.race([domReady, nav])
   }
   // Initial load, re-tried while the connection itself fails.
@@ -221,7 +270,9 @@ async function ensure(url: string, needContent: boolean): Promise<void> {
   await load()
   while (failCode && retries < MAX_RETRIES) {
     retries++
-    await delay(retryDelay(retries))
+    // First reset on this host → go through its CDN alias right away.
+    if (await switchToAlt(url)) target = toAlt(url)
+    else await delay(retryDelay(retries))
     await load()
   }
   let shown = false
@@ -231,7 +282,8 @@ async function ensure(url: string, needContent: boolean): Promise<void> {
     // Connection reset after DOM-ready (late failure) → reload.
     if (failCode && retries < MAX_RETRIES) {
       retries++
-      await delay(retryDelay(retries))
+      if (await switchToAlt(url)) target = toAlt(url)
+      else await delay(retryDelay(retries))
       await load()
       continue
     }
@@ -506,11 +558,12 @@ export async function tokiList(base: string, src: TokiListSource, page: number):
     // r.page = where the site actually landed (a jump past the end stops at the
     // last page) → report it so the UI shows the real page.
     const landed = r.page && r.page > 0 ? r.page - 1 : page
-    return { items: r.items ?? [], page: landed, hasNext: !!r.hasNext, genres: r.genres ?? [] }
+    const items = (r.items ?? []).map((it) => ({ ...it, url: fromAlt(it.url) }))
+    return { items, page: landed, hasNext: !!r.hasNext, genres: r.genres ?? [] }
   })
 }
 
-export async function tokiChapters(base: string, seriesUrl: string): Promise<TokiChapter[]> {
+export async function tokiChapters(seriesUrl: string): Promise<TokiChapter[]> {
   return queue(async () => {
     type R = { items: TokiChapter[]; last: number }
     await ensure(seriesUrl, true)
@@ -527,7 +580,8 @@ export async function tokiChapters(base: string, seriesUrl: string): Promise<Tok
       const r = await evalPage<R>(CHAPTERS_SCRIPT, { items: [], last: 1 })
       for (const c of r.items ?? []) if (!seen.has(c.url)) { seen.add(c.url); all.push(c) }
     }
-    return all.reverse() // site lists newest-first → ascending reading order
+    // Site lists newest-first → ascending reading order; canonical domain.
+    return all.reverse().map((c) => ({ ...c, url: fromAlt(c.url) }))
   })
 }
 
@@ -541,7 +595,7 @@ const AUTHOR_SCRIPT = `(() => {
   return out.length ? out.join(', ') : null
 })()`
 
-export async function tokiSeriesAuthor(base: string, seriesUrl: string): Promise<string | null> {
+export async function tokiSeriesAuthor(seriesUrl: string): Promise<string | null> {
   return queue(async () => {
     await ensure(seriesUrl, true)
     return evalPage<string | null>(AUTHOR_SCRIPT, null)
@@ -560,7 +614,7 @@ const TITLE_SCRIPT = `(() => {
   return d || null
 })()`
 
-export async function tokiSeriesTitle(base: string, seriesUrl: string): Promise<string | null> {
+export async function tokiSeriesTitle(seriesUrl: string): Promise<string | null> {
   return queue(async () => {
     await ensure(seriesUrl, true)
     return evalPage<string | null>(TITLE_SCRIPT, null)
@@ -630,10 +684,10 @@ export async function tokiAuthorForTitle(base: string, title: string): Promise<s
   if (!title.trim()) return null
   const hit = await firstMatch(base, title, (it) => !!it.url)
   if (!hit?.url) return null
-  return tokiSeriesAuthor(base, hit.url)
+  return tokiSeriesAuthor(hit.url)
 }
 
-export async function tokiReadUrls(base: string, chapterUrl: string): Promise<string[]> {
+export async function tokiReadUrls(chapterUrl: string): Promise<string[]> {
   return queue(async () => {
     await ensure(chapterUrl, true)
     return evalPage<string[]>(READ_SCRIPT, [])
@@ -650,7 +704,7 @@ export async function tokiOpenSite(base: string, url?: string): Promise<void> {
     // user is about to browse by hand.
     w.show()
     w.focus()
-    await w.loadURL(target).catch(() => {})
+    await w.loadURL(toAlt(target)).catch(() => {})
   })
 }
 
@@ -781,29 +835,7 @@ export async function downloadGenericChapters(
     const n = Math.floor(ch.num || i + 1)
     const chDir = join(seriesDir, safeName(chapterFolderName(title, ch.title, n)))
     await fs.mkdir(chDir, { recursive: true })
-    let idx = 0
-    const workers = Array.from({ length: 4 }, async () => {
-      for (;;) {
-        const j = idx++
-        if (j >= urls.length) break
-        try {
-          const fp = join(chDir, `img${String(j).padStart(4, '0')}${extOf(urls[j])}`)
-          // Resume: skip an image already on disk so a retry continues from
-          // where a stopped/failed download left off.
-          try {
-            const st = await fs.stat(fp)
-            if (st.size > 0) continue
-          } catch {
-            /* not present — download it */
-          }
-          const buf = await fetchImg(urls[j], referer)
-          await fs.writeFile(fp, buf)
-        } catch {
-          /* skip a bad image */
-        }
-      }
-    })
-    await Promise.all(workers)
+    await saveChapterImages(chDir, urls, (u) => fetchImg(u, referer))
   }
   onProgress(total, total, '완료')
   return seriesDir
@@ -829,7 +861,7 @@ export async function fetchTokiBuffer(base: string, url: string): Promise<Buffer
   for (let attempt = 0; ; attempt++) {
     let res: Response
     try {
-      res = await ses.fetch(url, {
+      res = await ses.fetch(toAlt(url), {
         headers: { 'User-Agent': UA, Referer: base.replace(/\/+$/, '') + '/' }
       })
     } catch (e) {
@@ -861,6 +893,34 @@ function extOf(url: string): string {
   const m = url.split('?')[0].match(/\.(png|jpe?g|gif|webp|avif)$/i)
   return m ? '.' + m[1].toLowerCase() : '.jpg'
 }
+
+// Save a chapter's page images into chDir as img0000.ext, img0001.ext …, four
+// at a time. Resumable: an image already on disk (non-empty) is skipped, so a
+// retry continues where a stopped/failed download left off. A failing image
+// is skipped; the rest still download.
+async function saveChapterImages(chDir: string, urls: string[], fetchBuf: (url: string) => Promise<Buffer>): Promise<void> {
+  let next = 0
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const j = next++
+      if (j >= urls.length) return
+      const fp = join(chDir, `img${String(j).padStart(4, '0')}${extOf(urls[j])}`)
+      try {
+        const st = await fs.stat(fp)
+        if (st.size > 0) continue
+      } catch {
+        /* not present — download it */
+      }
+      try {
+        await fs.writeFile(fp, await fetchBuf(urls[j]))
+      } catch {
+        /* skip a bad image, keep the rest */
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: 4 }, worker))
+}
+
 
 // Chapter folder name = "<n>화 <subtitle>" (or just "<n>화" when the chapter has
 // no title of its own). The series name lives on the parent folder only, so it's
@@ -895,7 +955,7 @@ export async function tokiDownloadSeries(
   only?: string[], // when set, download only these chapter urls (선택/이어서)
   signal?: AbortSignal
 ): Promise<string> {
-  const all = await tokiChapters(base, seriesUrl)
+  const all = await tokiChapters(seriesUrl)
   if (!all.length) throw new Error('화 목록을 찾지 못했습니다')
   const pick = only ? new Set(only) : null
   const chapters = pick ? all.filter((c) => pick.has(c.url)) : all
@@ -907,35 +967,14 @@ export async function tokiDownloadSeries(
     signal?.throwIfAborted()
     const ch = chapters[i]
     onProgress(i, total, ch.title)
-    const urls = await tokiReadUrls(base, ch.url)
+    const urls = await tokiReadUrls(ch.url)
     if (!urls.length) continue
     // Folder = "<n>화 <subtitle>" (series name is only on the parent). The chapter
     // number sorts/merges subset & 이어서 downloads correctly on its own.
     const n = Math.floor(ch.num || i + 1)
     const chDir = join(seriesDir, safeName(chapterFolderName(title, ch.title, n)))
     await fs.mkdir(chDir, { recursive: true })
-    let idx = 0
-    const workers = Array.from({ length: 4 }, async () => {
-      for (;;) {
-        const j = idx++
-        if (j >= urls.length) break
-        try {
-          const fp = join(chDir, `img${String(j).padStart(4, '0')}${extOf(urls[j])}`)
-          // Resume: skip an image already on disk (stopped/failed retry).
-          try {
-            const st = await fs.stat(fp)
-            if (st.size > 0) continue
-          } catch {
-            /* not present — download it */
-          }
-          const buf = await fetchTokiBuffer(base, urls[j])
-          await fs.writeFile(fp, buf)
-        } catch {
-          /* skip a bad image, keep the rest */
-        }
-      }
-    })
-    await Promise.all(workers)
+    await saveChapterImages(chDir, urls, (u) => fetchTokiBuffer(base, u))
   }
   onProgress(total, total, '완료')
   return seriesDir

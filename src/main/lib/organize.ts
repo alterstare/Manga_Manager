@@ -2,6 +2,7 @@ import { promises as fs } from 'fs'
 import { join, basename, dirname } from 'path'
 import type { Work, Settings } from '../../shared/types'
 import { langCategory, type LangCat } from '../../shared/lang'
+import { moveDir } from './favorites'
 
 // Language-based auto move (feature 5/1). Korean is the default language and
 // stays put. Works whose language is known and not Korean get moved into the
@@ -23,20 +24,6 @@ async function uniqueDest(dir: string, name: string): Promise<string> {
   let i = 2
   while (await exists(dest)) dest = join(dir, `${name} (${i++})`)
   return dest
-}
-
-async function moveDir(src: string, dest: string): Promise<void> {
-  if (src === dest) return
-  await fs.mkdir(dirname(dest), { recursive: true })
-  try {
-    await fs.rename(src, dest)
-  } catch (err: any) {
-    // Cross-volume rename fails with EXDEV; fall back to copy + remove.
-    if (err.code === 'EXDEV') {
-      await fs.cp(src, dest, { recursive: true })
-      await fs.rm(src, { recursive: true, force: true })
-    } else throw err
-  }
 }
 
 export async function organizeByLanguage(

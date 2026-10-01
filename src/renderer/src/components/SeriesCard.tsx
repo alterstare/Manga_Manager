@@ -1,14 +1,14 @@
 import { useMemo, useState } from 'react'
 import type { JSX, MouseEvent } from 'react'
 import type { SeriesGroup, ChapterInfo } from '../util'
-import { analyzeSeries, CHAP_FAV_PREFIX, tagToken, titleKey } from '../util'
+import { analyzeSeries, tagToken } from '../util'
 import { useStore } from '../store'
 import Thumb from './Thumb'
 import { ArtistLinks } from './ArtistLinks'
 import Stars from './Stars'
 import FavGroup from './FavGroup'
 import TagList from './TagList'
-import ContextMenu from './ContextMenu'
+import { useSeriesCard } from './useSeriesCard'
 import ConfirmModal from './ConfirmModal'
 
 // Open a folder's parent in Explorer (so we don't descend into chapter 1).
@@ -16,159 +16,39 @@ function parentOf(p: string): string {
   return p.replace(/[\\/][^\\/]*$/, '')
 }
 
-// Stable empty fallback — never return a fresh array from a zustand selector
-// (useSyncExternalStore would see a new reference every read → infinite loop).
-const NO_TAGS: string[] = []
-
-// Home entry for one general-manga series. Series-level favorite/rank/group and
-// series tags are separate from each chapter's. "화 목록" lists chapters with
-// their own label + subtitle + tags.
+// List row for a general-manga series: cover, title + favorite, meta
+// (chapter count · language · artist, each clearable), series tags, and the
+// action row (rating, folder, delete, "화 목록" chapter table). Behavior is
+// shared with the grid tile via useSeriesCard.
 export default function SeriesCard({ series }: { series: SeriesGroup }): JSX.Element {
   const addSearchToken = useStore((s) => s.addSearchToken)
   const openTab = useStore((s) => s.openTab)
-  const openTabBackground = useStore((s) => s.openTabBackground)
-  const openGlance = useStore((s) => s.openGlance)
-  const openSplit = useStore((s) => s.openSplit)
-  const splitOpen = useStore((s) => !!s.tabs.find((t) => t.id === s.activeTabId)?.split)
-  const createGroup = useStore((s) => s.createGroup)
-  const allGroups = useStore((s) => s.settings.groups)
-  const upsertWork = useStore((s) => s.upsertWork)
   const removeWork = useStore((s) => s.removeWork)
   const favoriteTags = useStore((s) => s.settings.favoriteTags)
   const scheme = useStore((s) => s.settings.normalChapterScheme)
-  const seriesTagsMap = useStore((s) => s.settings.seriesTags)
-  const seriesTags = seriesTagsMap?.[series.key] ?? NO_TAGS
-  const setSeriesTags = useStore((s) => s.setSeriesTags)
-  const toggleNormalFav = useStore((s) => s.toggleNormalFav)
-  const favSeries = useStore((s) => s.settings.normalFavSeries)
-  const toggleNormalUnifiedFav = useStore((s) => s.toggleNormalUnifiedFav)
-  // Same series favorited online (toki) → counts as favorited here too.
-  const onlineTitleFav = useStore((s) => {
-    const k = titleKey(series.title)
-    return !!k && Object.values(s.onlineFavs).some((f) => f.favorite && /^https?:/.test(f.code) && titleKey(f.title) === k)
-  })
-  const favChapters = useStore((s) => s.settings.normalFavChapters)
+  const c = useSeriesCard(series)
+  const { chapters, rep, artist, language } = c
   const [open, setOpen] = useState(false)
-  const [adding, setAdding] = useState(false)
-  const [newTag, setNewTag] = useState('')
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
-  const [crossMenu, setCrossMenu] = useState<{ x: number; y: number; query: string; raw: string } | null>(null)
-  const searchOnline = useStore((s) => s.searchOnline)
-  const addFavoriteTag = useStore((s) => s.addFavoriteTag)
-  const [newGrp, setNewGrp] = useState(false)
-  const [grpName, setGrpName] = useState('')
   const [confirmDel, setConfirmDel] = useState(false)
-
-  const chapters = series.chapters
-  const rep = chapters[0]
-  // In-app favorite (no folder move). A synthetic chapter entry (fav view) toggles
-  // just that chapter; a real series card toggles the whole SERIES by key.
-  const isChapterEntry = series.key.startsWith(CHAP_FAV_PREFIX)
-  const isFav = isChapterEntry
-    ? (favChapters ?? []).includes(rep?.id ?? '')
-    : (favSeries ?? []).includes(series.key) || onlineTitleFav
-  const maxRank = Math.max(0, ...chapters.map((c) => c.rank))
-  const artist = chapters.find((c) => c.artist)?.artist ?? null
-  const language = chapters.find((c) => c.language)?.language ?? null
   const infos = useMemo(() => analyzeSeries(chapters, series.title, scheme), [chapters, series.title, scheme])
-
-  const favAll = async (): Promise<void> => {
-    if (isChapterEntry) {
-      if (rep) await toggleNormalFav('chapter', rep.id, !isFav)
-    } else {
-      await toggleNormalUnifiedFav({ title: series.title, localKey: series.key })
-    }
-  }
-  const rankAll = async (r: number): Promise<void> => {
-    for (const c of chapters) upsertWork(await window.api.setRank(c.id, r))
-  }
-  // Clear a field (artist/language) on every chapter that has it.
-  const clearField = async (field: 'artist' | 'language'): Promise<void> => {
-    for (const c of chapters) upsertWork(await window.api.addManualTag(c.id, `${field}:`))
-  }
-  // Series tag: artist:/language: prefixes apply to chapters; others are series tags.
-  const addSeriesTag = async (): Promise<void> => {
-    const t = newTag.trim()
-    setNewTag('')
-    setAdding(false)
-    if (!t) return
-    if (/^(artist|language):/i.test(t)) {
-      for (const c of chapters) upsertWork(await window.api.addManualTag(c.id, t))
-    } else {
-      await setSeriesTags(series.key, [...new Set([...seriesTags, t.toLowerCase()])])
-    }
-  }
-  const removeSeriesTag = async (t: string): Promise<void> =>
-    setSeriesTags(series.key, seriesTags.filter((x) => x !== t))
-
-  // General-manga groups only. Add every chapter of the series to one group.
-  const normalGroups = allGroups.filter((g) => (g.mode ?? 'hitomi') === 'normal')
-  const addToGroup = async (gid: string): Promise<void> => {
-    try {
-      for (const c of chapters) upsertWork(await window.api.setWorkGroups(c.id, [gid]))
-    } catch (e: any) {
-      alert(String(e?.message ?? e))
-    }
-  }
-  const createAndAssign = async (): Promise<void> => {
-    const name = grpName.trim()
-    setGrpName('')
-    setNewGrp(false)
-    if (!name) return
-    const id = await createGroup(name)
-    if (id) await addToGroup(id)
-  }
 
   const deleteSeries = async (): Promise<void> => {
     setConfirmDel(false)
-    for (const c of chapters) {
-      await window.api.deleteWork(c.id)
-      removeWork(c.id)
+    for (const ch of chapters) {
+      await window.api.deleteWork(ch.id)
+      removeWork(ch.id)
     }
   }
 
   return (
     <div className="work-card-wrap">
-      <div
-        className="work-card"
-        onClickCapture={(e) => {
-          // Dragging to select/copy text must not open a tab.
-          if (window.getSelection()?.toString()) return e.stopPropagation()
-          if (e.altKey && rep) {
-            e.preventDefault()
-            e.stopPropagation()
-            openGlance({ workId: rep.id })
-          }
-        }}
-        onClick={() => rep && openTab(rep.id)}
-        onMouseDown={(e) => {
-          if (e.button === 1) e.preventDefault() // block middle-click autoscroll
-        }}
-        onAuxClick={(e) => {
-          if (e.button === 1 && rep) {
-            e.preventDefault()
-            openTabBackground(rep.id)
-          }
-        }}
-        onContextMenu={(e) => {
-          e.preventDefault()
-          setMenu({ x: e.clientX, y: e.clientY })
-        }}
-      >
+      <div className="work-card" {...c.cardEvents}>
         <Thumb workId={rep?.id ?? ''} />
         <div className="work-info">
           <div className="work-title-row">
             <span className="work-title selectable">{series.title}</span>
             {rep && (
-              <FavGroup
-                favorite={isFav}
-                onToggle={(e) => {
-                  e.stopPropagation()
-                  favAll()
-                }}
-                work={rep}
-                applyTo={chapters}
-              />
+              <FavGroup favorite={c.isFav} onToggle={c.toggleFav} work={rep} applyTo={chapters} />
             )}
           </div>
 
@@ -178,7 +58,7 @@ export default function SeriesCard({ series }: { series: SeriesGroup }): JSX.Ele
             {language && (
               <span className="lang removable">
                 {language}
-                <span className="tag-x" onClick={(e) => { e.stopPropagation(); clearField('language') }}>×</span>
+                <span className="tag-x" onClick={(e) => { e.stopPropagation(); c.clearField('language') }}>×</span>
               </span>
             )}
             {artist && ' · '}
@@ -187,31 +67,28 @@ export default function SeriesCard({ series }: { series: SeriesGroup }): JSX.Ele
                 <ArtistLinks
                   artist={artist}
                   onPick={(a) => addSearchToken(tagToken(`artist:${a}`))}
-                  onMenu={(a, e) => setCrossMenu({ x: e.clientX, y: e.clientY, query: tagToken(`artist:${a}`), raw: a })}
+                  onMenu={(a, e) => c.openTagMenu(e, tagToken(`artist:${a}`), a)}
                 />
-                <span className="tag-x" onClick={(e) => { e.stopPropagation(); clearField('artist') }}>×</span>
+                <span className="tag-x" onClick={(e) => { e.stopPropagation(); c.clearField('artist') }}>×</span>
               </span>
             )}
           </div>
 
           <div className="work-tags">
-            <TagList tags={seriesTags} favoriteTags={favoriteTags} manualTags={seriesTags} onTagContext={(t, e) => setCrossMenu({ x: e.clientX, y: e.clientY, query: tagToken(t), raw: t })} onRemove={removeSeriesTag} onAddClick={adding ? undefined : () => setAdding(true)} />
-            {adding && (
-              <input
-                autoFocus
-                className="tag-input"
-                value={newTag}
-                onClick={(e) => e.stopPropagation()}
-                onChange={(e) => setNewTag(e.target.value)}
-                onBlur={addSeriesTag}
-                onKeyDown={(e) => e.key === 'Enter' && addSeriesTag()}
-                placeholder="시리즈 태그…"
-              />
-            )}
+            <TagList
+              tags={c.seriesTags}
+              favoriteTags={favoriteTags}
+              manualTags={c.seriesTags}
+              onTagClick={(t) => addSearchToken(tagToken(t))}
+              onTagContext={(t, e) => c.openTagMenu(e, tagToken(t), t)}
+              onRemove={c.removeSeriesTag}
+              onAddClick={c.adding ? undefined : c.startAddTag}
+            />
+            {c.tagInput}
           </div>
 
           <div className="work-actions">
-            <Stars rank={maxRank} onChange={rankAll} />
+            <Stars rank={c.maxRank} onChange={c.rankAll} />
             <button
               className="mini"
               onClick={(e) => {
@@ -251,31 +128,8 @@ export default function SeriesCard({ series }: { series: SeriesGroup }): JSX.Ele
         </div>
       )}
 
-      {menu && rep && (
-        <ContextMenu
-          x={menu.x}
-          y={menu.y}
-          items={[
-            { label: '새 탭에서 열기', onClick: () => openTab(rep.id) },
-            { label: '백그라운드에서 열기', onClick: () => openTabBackground(rep.id) },
-            { label: splitOpen ? '오른쪽 뷰에서 열기' : '분할 뷰에서 열기', onClick: () => openSplit(rep.id) },
-            ...normalGroups.map((g) => ({ label: `그룹 · ${g.name}`, onClick: () => addToGroup(g.id) })),
-            { label: '＋ 새 그룹에 추가', onClick: () => setNewGrp(true) }
-          ]}
-          onClose={() => setMenu(null)}
-        />
-      )}
-      {crossMenu && (
-        <ContextMenu
-          x={crossMenu.x}
-          y={crossMenu.y}
-          items={[
-            { label: '온라인에서 검색', onClick: () => searchOnline(crossMenu.query) },
-            { label: '즐겨찾는 태그로 추가', onClick: () => addFavoriteTag(crossMenu.raw) }
-          ]}
-          onClose={() => setCrossMenu(null)}
-        />
-      )}
+      {c.seriesMenu}
+      {c.tagMenu}
       {confirmDel && (
         <ConfirmModal
           danger
@@ -291,24 +145,6 @@ export default function SeriesCard({ series }: { series: SeriesGroup }): JSX.Ele
           onConfirm={deleteSeries}
           onCancel={() => setConfirmDel(false)}
         />
-      )}
-      {newGrp && (
-        <div className="modal-overlay" onClick={() => setNewGrp(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-head">
-              <h2>새 그룹에 추가</h2>
-            </div>
-            <input
-              autoFocus
-              className="tag-input"
-              style={{ margin: 12, width: 'calc(100% - 24px)' }}
-              value={grpName}
-              onChange={(e) => setGrpName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && createAndAssign()}
-              placeholder="새 그룹 이름"
-            />
-          </div>
-        </div>
       )}
     </div>
   )

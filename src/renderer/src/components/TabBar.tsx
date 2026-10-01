@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { JSX } from 'react'
-import { useStore } from '../store'
+import { useStore, useSeriesRoots } from '../store'
 import type { Tab, TabGroup } from '../store'
 import ContextMenu from './ContextMenu'
 import type { MenuItem } from './ContextMenu'
@@ -11,8 +11,6 @@ export default function TabBar(): JSX.Element {
   const tabs = useStore((s) => s.tabs)
   const tabGroups = useStore((s) => s.tabGroups)
   const works = useStore((s) => s.works)
-  const normalRootsSetting = useStore((s) => s.settings.normalRoots)
-  const normalFav = useStore((s) => s.settings.normalFavoritesDir)
   const chapterScheme = useStore((s) => s.settings.normalChapterScheme)
   const activeTabId = useStore((s) => s.activeTabId)
   const view = useStore((s) => s.view)
@@ -241,10 +239,7 @@ export default function TabBar(): JSX.Element {
   // General-manga chapters have no series field: the series name lives on the
   // parent folder. Derive per-chapter "n화" + series title once, so a local
   // normal-library tab can read "n화 · 시리즈명" instead of just the folder name.
-  const normalRoots = useMemo(
-    () => [...(normalRootsSetting ?? []), normalFav].filter(Boolean) as string[],
-    [normalRootsSetting, normalFav]
-  )
+  const normalRoots = useSeriesRoots()
   const normalLabels = useMemo(() => {
     const map = new Map<string, { series: string; label: string }>()
     const normal = works.filter((w) => (w.library ?? 'hitomi') === 'normal')

@@ -1,4 +1,5 @@
 import { hasExclusions, filterExcluded, getExcluded } from './exclude'
+import { isTokiCode } from './util'
 
 // Caches the per-work image url list so thumbnails and the reader share one
 // readdir round-trip. Cleared entries reload on demand.
@@ -33,7 +34,7 @@ export function getOnlineImages(code: string): Promise<string[]> {
   let p = onlineCache.get(code)
   if (!p) {
     // A toki "code" is the chapter viewer URL (http…); a hitomi code is numeric.
-    p = /^https?:/.test(code) ? window.api.tokiReadUrls(code) : window.api.hitomiReadUrls(code)
+    p = isTokiCode(code) ? window.api.tokiReadUrls(code) : window.api.hitomiReadUrls(code)
     onlineCache.set(code, p)
   }
   return p
