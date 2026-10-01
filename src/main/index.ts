@@ -12,7 +12,7 @@ import type { UpdateStatus } from '../shared/ipc'
 import { store, appState, setMainWindow, getMainWindow, sendToRenderer } from './context'
 import { moveFromFavorites } from './lib/favorites'
 import { scannedFavorite, migrateFavorites } from './lib/favoriteSync'
-import { setTokiChallengeHandler } from './lib/toki'
+import { setTokiChallengeHandler, setTokiStatusHandler } from './lib/toki'
 import { applyNetwork } from './lib/network'
 import { registerImageScheme, handleImageProtocol, initThumbDir } from './lib/media'
 import { registerLibraryIpc } from './ipc/library'
@@ -184,6 +184,7 @@ app.whenReady().then(async () => {
 
   // Cloudflare check window shown/cleared → "인증 필요" banner in the renderer.
   setTokiChallengeHandler((active) => sendToRenderer(IPC.tokiChallenge, active))
+  setTokiStatusHandler((msg) => sendToRenderer(IPC.tokiStatus, msg))
 
   if (app.isPackaged) setupAutoUpdate()
 

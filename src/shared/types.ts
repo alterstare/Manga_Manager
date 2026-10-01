@@ -147,6 +147,10 @@ export interface Settings {
   dnsMode: 'system' | 'doh' // 'system' lets tools like Unicorn HTTPS intercept DNS
   dohServer: string // DNS-over-HTTPS endpoint when dnsMode = 'doh'
   proxyServer: string // optional proxy rules (e.g. 'socks5://127.0.0.1:1080'), '' = direct
+  // Secure DNS (DNS-over-HTTPS) for every Chromium connection in the app, like
+  // Chrome's setting. Bypasses DNS-level blocking; also enables ECH on sites that
+  // publish it (hides the domain from SNI filtering).
+  secureDns: boolean
   hitomiBaseUrl: string // hitomi content/CDN host (e.g. 'gold-usergeneratedcontent.net'); '' = online disabled
   readerMode: 'scroll' | 'paged' | 'spread'
   // Last-used reader mode, remembered separately per library so hitomi and
@@ -342,6 +346,7 @@ export const DEFAULT_SETTINGS: Settings = {
   dnsMode: 'system',
   dohServer: 'https://cloudflare-dns.com/dns-query',
   proxyServer: '',
+  secureDns: false,
   hitomiBaseUrl: '',
   readerMode: 'scroll',
   lastReaderMode: { hitomi: 'scroll', normal: 'scroll' },

@@ -113,8 +113,8 @@ type DownloadSpec =
 - Stop = `stopDownload(code)` (IPC `download:stop`) → abort → `stopped` + rejects
   with `STOP_MSG` (`'DOWNLOAD_STOPPED'`), which the renderer treats as non-error.
 - Lib functions take `signal?` and `signal?.throwIfAborted()` per loop step
-  (hitomi per image, toki per chapter). Chapter images save 4 at a time and are
-  resumable (`saveChapterImages` in toki.ts skips files already on disk).
+  (hitomi per image, toki per chapter). Toki chapter images save 4 at a time
+  and are resumable (files already on disk are skipped).
 - `HitomiProgress.phase`: `'queued' | 'fetching' | 'downloading' | 'enriching' |
   'done' | 'error' | 'stopped'`. Code = hitomi code / toki seriesUrl / `backup:<title>`.
 

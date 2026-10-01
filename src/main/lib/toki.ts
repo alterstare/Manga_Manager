@@ -53,6 +53,14 @@ export function setTokiChallengeHandler(fn: (active: boolean) => void): void {
   onChallenge = fn
 }
 
+// What the scraper is doing right now (shown instead of a bare "불러오는 중…"
+// while the site is slow / being retried); null = idle. Set by main.
+let onStatus: ((msg: string | null) => void) | null = null
+export function setTokiStatusHandler(fn: (msg: string | null) => void): void {
+  onStatus = fn
+}
+const status = (msg: string | null): void => onStatus?.(msg)
+
 // The scraper window's 'close' handler vetoes close (keeps the session alive), but
 // that veto would also cancel app.quit() and strand the process in the background.
 // Force-destroy it as soon as the app starts quitting so shutdown is clean.
@@ -141,7 +149,7 @@ function sameUrl(a: string, b: string): boolean {
 }
 
 function queue<T>(fn: () => Promise<T>): Promise<T> {
-  const run = chain.then(fn, fn)
+  const run = chain.then(fn, fn).finally(() => status(null))
   chain = run.catch(() => {})
   return run
 }
@@ -210,14 +218,15 @@ async function ensure(url: string, needContent: boolean): Promise<void> {
   }
   w.webContents.on('did-fail-load', onFail)
   let nav: Promise<undefined> = Promise.resolve(undefined)
+  let retries = 0
   const load = async (): Promise<void> => {
     failCode = 0
+    status(retries ? `연결이 끊겨 다시 시도하는 중… (${retries}/${MAX_RETRIES})` : '사이트에 연결하는 중…')
     const domReady = new Promise<void>((r) => w.webContents.once('dom-ready', () => r()))
     nav = withTimeout(w.loadURL(url).then(() => undefined), 45000, undefined)
     await Promise.race([domReady, nav])
   }
   // Initial load, re-tried while the connection itself fails.
-  let retries = 0
   await load()
   while (failCode && retries < MAX_RETRIES) {
     retries++
@@ -226,6 +235,7 @@ async function ensure(url: string, needContent: boolean): Promise<void> {
   }
   let shown = false
   const start = Date.now()
+  if (!failCode) status('페이지를 읽는 중…')
   for (let first = true; ; first = false) {
     if (!first) await delay(300)
     // Connection reset after DOM-ready (late failure) → reload.
@@ -248,11 +258,13 @@ async function ensure(url: string, needContent: boolean): Promise<void> {
         w.show()
         w.focus()
         onChallenge?.(true) // tell the app to show the "인증 필요" banner
+        status('사이트 인증 대기 중 — 열린 창에서 인증을 마쳐 주세요')
       }
       if (Date.now() - start > 180000) break // give up after 3 min
       continue
     }
     if (p.ready) break
+    if (!shown) status('페이지를 읽는 중…')
     // No content selector needed → done once the page has fully loaded.
     if (!needContent && (await Promise.race([nav.then(() => true), delay(0).then(() => false)]))) break
     if (!needContent && Date.now() - start > 8000) break
@@ -261,6 +273,7 @@ async function ensure(url: string, needContent: boolean): Promise<void> {
   // Only hide if we popped it open for a challenge AND it's now resolved, so the
   // user isn't left staring at a blank window — but don't thrash on every call.
   w.webContents.removeListener('did-fail-load', onFail)
+  if (failCode) status('연결할 수 없습니다 — 잠시 후 다시 시도해 주세요')
   if (shown && win && !win.isDestroyed() && (await hasClearance())) win.hide()
   if (shown) onChallenge?.(false) // clear the banner (solved, or gave up)
 }
@@ -521,6 +534,7 @@ export async function tokiChapters(_base: string, seriesUrl: string): Promise<To
     // the scraped href, so a mirror-domain link can't send us elsewhere.
     const last = Math.min(first.last || 1, 200)
     for (let p = 2; p <= last; p++) {
+      status(`화 목록을 불러오는 중… (${p}/${last}쪽)`)
       const u = new URL(seriesUrl)
       u.searchParams.set('epage', String(p))
       await ensure(u.href, true)

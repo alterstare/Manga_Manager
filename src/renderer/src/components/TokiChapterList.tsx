@@ -6,11 +6,13 @@ import type { TokiChapter } from '../../../shared/ipc'
 import type { OnlineFav } from '../../../shared/types'
 import Stars from './Stars'
 import { SearchIcon, FavoriteIcon, AutoStoriesIcon } from './icons'
+import { useTokiStatus } from './useTokiStatus'
 
 // Left list shown while reading a toki chapter: the sibling chapters of the active
 // tab's series. Mirrors the local general-manga left list (LibraryList) so the
 // reader chrome is identical between local and online in general-manga mode.
 export default function TokiChapterList(): JSX.Element {
+  const tokiStatus = useTokiStatus()
   const replaceTabOnline = useStore((s) => s.replaceTabOnline)
   const goHome = useStore((s) => s.goHome)
   const onlineFavs = useStore((s) => s.onlineFavs)
@@ -95,7 +97,7 @@ export default function TokiChapterList(): JSX.Element {
       )}
       <div className="lib-list-scroll compact">
         {error && <div className="warn err">{error}</div>}
-        {loading && <div className="reader-loading">불러오는 중…</div>}
+        {loading && <div className="reader-loading">{tokiStatus ?? '불러오는 중…'}</div>}
         {list.map((c) => {
           const fav = onlineFavs[c.url]
           return (

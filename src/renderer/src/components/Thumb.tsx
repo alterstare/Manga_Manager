@@ -12,7 +12,10 @@ import { useStore } from '../store'
 export function useHoverPreview(
   ref: RefObject<HTMLDivElement | null>,
   getImgs: () => Promise<string[]>
-): { handlers: { onMouseEnter: () => void; onMouseLeave: () => void }; portal: JSX.Element | null } {
+): {
+  handlers: { onMouseEnter: () => void; onMouseLeave: () => void; onMouseDown: () => void }
+  portal: JSX.Element | null
+} {
   const previewOn = useStore((s) => s.settings.thumbHoverPreview !== false)
   const enterTimer = useRef<number | undefined>(undefined)
   const [preview, setPreview] = useState(false)
@@ -46,6 +49,10 @@ export function useHoverPreview(
     if (!el) return
     window.clearTimeout(enterTimer.current)
     enterTimer.current = window.setTimeout(() => {
+      // Only if the pointer is still on this (visible) thumb — opening a work
+      // with a click swaps the view while the mouse stays put, and the preview
+      // must not pop up over the new screen.
+      if (!el.isConnected || !el.matches(':hover') || el.getClientRects().length === 0) return
       setRect(el.getBoundingClientRect())
       setIdx(0)
       setPreview(true)
@@ -63,7 +70,8 @@ export function useHoverPreview(
     preview && rect && imgs && imgs.length > 0 ? (
       <PreviewPortal rect={rect} src={imgs[idx]} page={idx + 1} total={imgs.length} onClose={onMouseLeave} />
     ) : null
-  return { handlers: { onMouseEnter, onMouseLeave }, portal }
+  // A click (opening the work) cancels a pending preview.
+  return { handlers: { onMouseEnter, onMouseLeave, onMouseDown: onMouseLeave }, portal }
 }
 
 // Thumbnail url of a local work: the cached ≤480px webp (generated once, then

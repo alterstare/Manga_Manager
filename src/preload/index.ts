@@ -116,6 +116,11 @@ const api: Api = {
     ipcRenderer.on(IPC.tokiChallenge, listener)
     return () => ipcRenderer.removeListener(IPC.tokiChallenge, listener)
   },
+  onTokiStatus: (cb) => {
+    const listener = (_e: unknown, msg: string | null): void => cb(msg)
+    ipcRenderer.on(IPC.tokiStatus, listener)
+    return () => ipcRenderer.removeListener(IPC.tokiStatus, listener)
+  },
   onUpdateStatus: (cb) => {
     const listener = (_e: unknown, s: import('../shared/ipc').UpdateStatus): void => cb(s)
     ipcRenderer.on(IPC.updateStatus, listener)

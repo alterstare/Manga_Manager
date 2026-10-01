@@ -119,6 +119,7 @@ export const IPC = {
   tokiDownloadGeneric: 'toki:downloadGeneric',
   tokiOpenSite: 'toki:openSite',
   tokiChallenge: 'toki:challenge', // main -> renderer: Cloudflare auth window shown/cleared
+  tokiStatus: 'toki:status', // main -> renderer: what the toki scraper is doing (null = idle)
   saveThumb: 'thumb:save',
   getThumb: 'thumb:get',
   pickImage: 'dialog:pickImage',
@@ -358,6 +359,7 @@ export interface Api {
   resetApp: (deleteWorkFolders: boolean) => Promise<void>
   // Cloudflare auth window shown (true) / cleared (false) — show a banner.
   onTokiChallenge: (cb: (active: boolean) => void) => () => void
+  onTokiStatus: (cb: (msg: string | null) => void) => () => void
   // Mouse "back" side button / browser-backward app command → go back.
   onNavBack: (cb: () => void) => () => void
   // Mouse "forward" side button / browser-forward app command → go forward.

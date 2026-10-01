@@ -22,6 +22,7 @@ import { DownloadIcon } from './icons'
 import { FIT_TEXT, FIT_ICON, FIT_ORDER, SCROLL_FIT_ORDER, fitStyle, fitHeight } from './reader/fit'
 import { prefetchOrdered } from './reader/prefetch'
 import PageSlot from './reader/PageSlot'
+import { useTokiStatus } from './useTokiStatus'
 
 // (tab, pane, work) combos whose view was already counted this session, so a
 // re-render / remount of the same open work doesn't bump viewCount again.
@@ -34,6 +35,7 @@ export default function Reader({
   tabId: string
   side?: 'left' | 'right'
 }): JSX.Element {
+  const tokiStatus = useTokiStatus()
   const tab = useStore((s) => s.tabs.find((t) => t.id === tabId))
   // Which work/online this pane shows depends on the side of the (split) tab.
   const paneWorkId = side === 'right' ? tab?.rightWorkId : tab?.workId
@@ -738,7 +740,7 @@ export default function Reader({
         )}
       </div>
 
-      {loadingImgs && <div className="reader-loading">이미지 로딩 중…</div>}
+      {loadingImgs && <div className="reader-loading">{(online?.kind === 'toki' && tokiStatus) || '이미지 로딩 중…'}</div>}
 
       {mode === 'scroll' ? (
         (() => {

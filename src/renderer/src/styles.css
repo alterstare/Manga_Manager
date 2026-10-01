@@ -2935,6 +2935,14 @@ button:active,
 .toggle.fav-dl.on .fav-dl-all {
   opacity: 0;
 }
+.toggle.fav-dl .fav-dl-icon:has(.fav-dl-text) {
+  left: 6px; /* "DNS" is wider than the glyph icons */
+}
+.toggle.fav-dl .fav-dl-text {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
 
 /* Filled favorite heart in the "즐겨찾기" filter chips → always red, with a gap
    before the label so the icon and text aren't cramped. */

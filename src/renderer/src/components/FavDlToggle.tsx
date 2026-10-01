@@ -11,13 +11,15 @@ export default function FavDlToggle({
   onChange,
   icon,
   onTitle,
-  offTitle
+  offTitle,
+  offLabel = 'ALL'
 }: {
   checked: boolean
   onChange: (v: boolean) => void
   icon?: ReactNode
   onTitle?: string
   offTitle?: string
+  offLabel?: string
 }): JSX.Element {
   return (
     <button
@@ -29,7 +31,7 @@ export default function FavDlToggle({
       title={checked ? onTitle ?? '필터 켜짐' : offTitle ?? '전체 보는 중'}
     >
       <span className="fav-dl-icon">{icon ?? <DownloadIcon />}</span>
-      <span className="fav-dl-all">ALL</span>
+      <span className="fav-dl-all">{offLabel}</span>
       <span className="toggle-knob" />
     </button>
   )
@@ -69,6 +71,26 @@ export function FavSortSelect({
         ['rank', '평점 높은순'],
         ['recent', '최근 추가순']
       ]}
+    />
+  )
+}
+
+// General-manga online toolbar: 보안 DNS (DNS over HTTPS) on/off — same switch
+// as settings › 네트워크; saving re-applies the host resolver in main.
+export function SecureDnsToggle(): JSX.Element {
+  const settings = useStore((s) => s.settings)
+  return (
+    <FavDlToggle
+      checked={settings.secureDns === true}
+      onChange={(v) => {
+        const s = { ...settings, secureDns: v }
+        useStore.setState({ settings: s })
+        void window.api.saveSettings(s)
+      }}
+      icon={<span className="fav-dl-text">DNS</span>}
+      offLabel="OFF"
+      onTitle="보안 DNS (DNS over HTTPS) 켜짐"
+      offTitle="보안 DNS 꺼짐 — 클릭해서 켜기"
     />
   )
 }

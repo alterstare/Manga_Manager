@@ -10,9 +10,10 @@ import TokiBackupModal from './TokiBackupModal'
 import OnlineThumb from './OnlineThumb'
 import { getOnlineImages } from '../images'
 import { SearchIcon, FavoriteIcon, DownloadIcon } from './icons'
-import { OnlineOnlyToggle, FavSortSelect } from './FavDlToggle'
+import { SecureDnsToggle, OnlineOnlyToggle, FavSortSelect } from './FavDlToggle'
 import Pager from './Pager'
 import { groupSeries, titleKey, isTokiCode } from '../util'
+import { useTokiStatus } from './useTokiStatus'
 
 const SORTS: [TokiSort, string][] = [
   ['date', '최신순'],
@@ -37,6 +38,7 @@ function favMeta(g: TokiSummary, artist: string | null): Partial<OnlineFav> {
 // Favorites/ratings reuse the online-fav store, keyed by the series url (http),
 // which keeps them separate from hitomi's numeric-code favorites.
 export default function TokiBrowse(): JSX.Element {
+  const tokiStatus = useTokiStatus()
   const openToki = useStore((s) => s.openToki)
   const openTokiBackground = useStore((s) => s.openTokiBackground)
   const openGlance = useStore((s) => s.openGlance)
@@ -315,6 +317,7 @@ export default function TokiBrowse(): JSX.Element {
         </div>
 
         <div className="chips">
+          <SecureDnsToggle />
           {TYPES.map(([v, l]) => (
             <button
               key={v}
@@ -397,7 +400,7 @@ export default function TokiBrowse(): JSX.Element {
       </div>
 
       {error && !favMode && <div className="warn err">{error} — 설정의 온라인 주소를 확인하세요.</div>}
-      {loading && !favMode && <div className="reader-loading">불러오는 중…</div>}
+      {loading && !favMode && <div className="reader-loading">{tokiStatus ?? '불러오는 중…'}</div>}
       {favMode && gallery.length === 0 && (
         <div className="empty">즐겨찾기한 일반 만화 온라인 작품이 없습니다.</div>
       )}
