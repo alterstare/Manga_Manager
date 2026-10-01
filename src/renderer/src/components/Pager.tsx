@@ -6,10 +6,12 @@ interface Props {
   lastPage: number // 0-based; -1 when unknown
   onPage: (p: number) => void
   small?: boolean
+  // When the total is unknown (lastPage = -1): whether a next page exists.
+  hasNext?: boolean
 }
 
 // Prev / [editable current] / total / Next. Type a page and press Enter to jump.
-export default function Pager({ page, lastPage, onPage, small }: Props): JSX.Element {
+export default function Pager({ page, lastPage, onPage, small, hasNext }: Props): JSX.Element {
   const [val, setVal] = useState(String(page + 1))
   useEffect(() => setVal(String(page + 1)), [page])
 
@@ -37,7 +39,7 @@ export default function Pager({ page, lastPage, onPage, small }: Props): JSX.Ele
       </span>
       <button
         className={small ? 'mini' : 'btn'}
-        disabled={lastPage >= 0 && page >= lastPage}
+        disabled={lastPage >= 0 ? page >= lastPage : hasNext === false}
         onClick={() => onPage(page + 1)}
       >
         →

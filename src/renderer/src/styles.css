@@ -1082,6 +1082,24 @@ select {
   white-space: nowrap;
   flex-shrink: 0;
 }
+.reader-artist-more {
+  /* Shrinks long before the title does; names that don't fit wrap to a hidden
+     second line so only whole names show. */
+  flex: 0 1000 auto;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  height: 18px;
+  line-height: 18px;
+  overflow: hidden;
+  margin-left: -14px; /* sit right after the first artist (cancel head gap) */
+}
+.reader-artist-item {
+  display: inline-flex;
+  color: var(--accent);
+  font-size: 13px;
+  white-space: nowrap;
+}
 .reader-artist.link {
   cursor: pointer;
   text-decoration: underline;
@@ -1679,11 +1697,27 @@ input[type='checkbox']:checked::after {
   cursor: pointer;
   display: flex;
   flex-direction: column;
+  /* Fixed tile height = border + thumb + foot + 2 title lines + meta + artist + 5 tag
+     rows. A 1-line title doesn't reserve its 2nd line: content flows up and the
+     spare space ends up at the bottom. */
+  height: calc(2px + 240px + 36px + 13px * 1.3 * 2 + 10px + 16px + 16px + 24px * 5 + 4px * 4 + 18px);
+}
+/* General-manga series tile: count + artist share one line, 2 tag rows. */
+.gtile.series {
+  height: calc(2px + 240px + 36px + 13px * 1.3 * 2 + 10px + 16px + 24px * 2 + 4px + 18px);
+}
+.gtile.series .gtile-tags {
+  height: calc(24px * 2 + 4px + 18px);
+}
+.gtile:has(.taglist-grid.expanded),
+.gtile:has(.tag-input) {
+  height: auto;
 }
 .gtile:hover {
   border-color: var(--accent-2);
 }
 .gtile-thumb {
+  flex: none;
   position: relative;
   width: 100%;
   height: 240px;
@@ -1715,11 +1749,21 @@ input[type='checkbox']:checked::after {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  /* At most two lines; tile height (on .gtile) budgets for both. */
+  max-height: calc(13px * 1.3 * 2 + 10px);
+  flex: none;
 }
 .gtile-meta {
+  flex: none;
   padding: 0 10px;
   font-size: 11px;
   color: var(--text-dim);
+  /* Fixed one line (meta / artist) so every tile is the same height. */
+  height: 16px;
+  line-height: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .gtile-tags {
   display: flex;
@@ -1727,7 +1771,22 @@ input[type='checkbox']:checked::after {
   align-content: flex-start;
   gap: 4px;
   padding: 6px 10px 12px;
-  flex: 1;
+  /* Fixed 5 tag rows (24px tags, 4px gaps) + padding — identical tile heights in
+     every view regardless of how many tags a work has. */
+  /* Basis = 5 tag rows; may shrink (min 0) when a multi-line artist list needs the
+     room — TagList then fits fewer rows. */
+  flex: 0 1 auto;
+  min-height: 0;
+  height: calc(24px * 5 + 4px * 4 + 18px);
+  overflow: hidden;
+}
+/* Every artist is shown, wrapping onto extra lines (eats tag rows instead). */
+.gtile-meta.gtile-artist,
+.gtile.series .gtile-meta {
+  height: auto;
+  min-height: 16px;
+  white-space: normal;
+  overflow: visible;
 }
 .gtile-tags .tag {
   font-size: 10px;
@@ -1735,6 +1794,8 @@ input[type='checkbox']:checked::after {
 }
 .gtile-foot {
   padding: 8px 10px 0;
+  height: 36px;
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1952,6 +2013,29 @@ body.resizing {
   padding: 4px 8px;
   background: var(--bg-3);
   border-radius: var(--r3);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.lib-series-label > .micon {
+  width: 16px;
+  height: 16px;
+}
+/* Local series header: full-width, with series favorite + group on the right. */
+.lib-series-label.wide {
+  flex: 1;
+  /* Just tall enough for the fav/group pill (28px), same pill as the chapter rows. */
+  padding: 2px 2px 2px 10px;
+}
+.lib-series-actions {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  /* Don't inherit the label's bold 12px text: the group "＋" glyph would render
+     heavier and sit lower than the identical pill in the chapter rows. */
+  font-weight: 400;
+  font-size: 13px;
+  line-height: normal;
 }
 
 /* Force monochrome (text) presentation for drawer glyphs. */
@@ -2152,6 +2236,17 @@ body.resizing {
 }
 .spread-pages img {
   height: auto;
+}
+/* Cover cell: clips the whole-image-sized page (see Reader spread cover). */
+.spread-cell {
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.spread-cell > * {
+  flex: none;
 }
 
 /* drawer header / close button (mirrors the ☰ opener position) */
@@ -2892,6 +2987,84 @@ button:active,
   width: 0.9em;
   height: 0.9em;
 }
+/* Online (not-downloaded) favorite card inside the unified favorites grid. */
+.gtile.online-fav .gtile-thumb-inner {
+  width: 100%;
+  height: 100%;
+}
+.gtile.online-fav .gtile-thumb-inner img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain; /* same letterboxed cover as local tiles */
+}
+.gtile.online-fav .gtile-thumb {
+  position: relative;
+}
+.online-fav-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: var(--r4);
+  background: var(--accent);
+  color: #fff;
+  pointer-events: none;
+}
+
+/* Favorites downloaded-only pill switch. ON = purple + download glyph + knob right
+   (다운로드만); OFF = grey + "ALL" + knob left. */
+.toggle.fav-dl {
+  width: 58px;
+  height: 32px; /* match the favorite chip thickness */
+}
+.toggle.fav-dl .toggle-knob {
+  width: 24px;
+  height: 24px;
+  top: 3px;
+  left: 3px;
+  transition: transform 0.15s;
+}
+/* Slide via transform so it can't overflow the pill regardless of box-sizing. */
+.toggle.fav-dl.on .toggle-knob {
+  left: 3px;
+  transform: translateX(27px);
+}
+.toggle.fav-dl .fav-dl-icon {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  color: #fff;
+  opacity: 0;
+  transition: opacity 0.15s;
+  pointer-events: none;
+}
+.toggle.fav-dl.on .fav-dl-icon {
+  opacity: 1;
+}
+.toggle.fav-dl .fav-dl-all {
+  position: absolute;
+  right: 7px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-dim);
+  opacity: 1;
+  transition: opacity 0.15s;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.toggle.fav-dl.on .fav-dl-all {
+  opacity: 0;
+}
+
 /* Filled favorite heart in the "즐겨찾기" filter chips → always red, with a gap
    before the label so the icon and text aren't cramped. */
 .fav-ico {
@@ -4810,4 +4983,42 @@ select:focus,
 }
 .taglist-line.measuring .more-measure {
   display: inline-flex !important;
+}
+
+/* Grid row-fit tag list: whole tags only, as many as fit in N rows; the +N / + 태그
+   buttons are budgeted into the last row so nothing spills past the card. */
+.taglist-grid {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 4px;
+  width: 100%;
+}
+.taglist-grid .mtag {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  display: inline-block;
+  line-height: 22px;
+}
+.taglist-grid .mtag.clipped {
+  display: none;
+}
+.taglist-grid.measuring .mtag.clipped {
+  display: inline-block;
+}
+.taglist-grid.measuring .more-measure {
+  display: inline-flex !important;
+}
+/* "+N" expanded: let the tag area grow past its fixed 5-row height. */
+.gtile-tags:has(.taglist-grid.expanded) {
+  height: auto;
+  overflow: visible;
+}
+
+/* Online (not-downloaded) favorite as a list row: badge over the 90x120 thumb. */
+.online-fav-row .thumb {
+  position: relative;
 }

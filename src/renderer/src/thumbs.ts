@@ -45,9 +45,14 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 async function generate(workId: string): Promise<string | null> {
   const cover = await getCover(workId)
   if (!cover) return null
+  return encodeFrom(workId, cover, true)
+}
+
+// Downscale `src` to the ≤480px webp thumb and save it for `workId`.
+async function encodeFrom(workId: string, src: string, cropTall = false): Promise<string | null> {
   let img: HTMLImageElement
   try {
-    img = await loadImage(cover)
+    img = await loadImage(src)
   } catch {
     return null
   }
@@ -57,7 +62,7 @@ async function generate(workId: string): Promise<string | null> {
   // Webtoon chapters are one very tall strip; squishing the whole height into the
   // thumbnail yields a blank-looking sliver. For tall images use only the TOP
   // (square-ish) region as the cover, like every other reader does.
-  const srcH = sh / sw > 1.6 ? Math.round(sw * 1.4) : sh
+  const srcH = cropTall && sh / sw > 1.6 ? Math.round(sw * 1.4) : sh
   const MAX = 480
   const scale = Math.min(1, MAX / Math.max(sw, srcH))
   const w = Math.max(1, Math.round(sw * scale))
@@ -77,8 +82,26 @@ async function generate(workId: string): Promise<string | null> {
 
 async function resolve(workId: string): Promise<string | null> {
   const existing = await window.api.getThumb(workId)
+  // Raw full-size cover (online cover regen) → shrink once; keep it if that fails.
+  if (existing?.endsWith('#raw')) {
+    const url = existing.slice(0, -4)
+    return schedule(() => encodeFrom(workId, url)).then((u) => u ?? url, () => url)
+  }
   if (existing) return existing
   return schedule(() => generate(workId))
+}
+
+// Mounted <Thumb>s listen for their work's thumb resolving later (e.g. a download
+// finished after the card first found no cover) and swap it in.
+const listeners = new Map<string, Set<(url: string | null) => void>>()
+export function onThumb(workId: string, fn: (url: string | null) => void): () => void {
+  let set = listeners.get(workId)
+  if (!set) listeners.set(workId, (set = new Set()))
+  set.add(fn)
+  return () => {
+    set!.delete(fn)
+    if (!set!.size) listeners.delete(workId)
+  }
 }
 
 export async function loadThumb(workId: string): Promise<string | null> {
@@ -88,6 +111,7 @@ export async function loadThumb(workId: string): Promise<string | null> {
     p = resolve(workId).then((url) => {
       mem.set(workId, url)
       pending.delete(workId)
+      listeners.get(workId)?.forEach((fn) => fn(url))
       return url
     })
     pending.set(workId, p)
@@ -114,6 +138,23 @@ export async function warmThumbs(
         })
     )
   )
+}
+
+// Already-resolved thumb url (sync), or undefined if not loaded yet — lets a
+// remounted card paint its cover immediately instead of flashing blank.
+export function peekThumb(workId: string): string | null | undefined {
+  return mem.get(workId)
+}
+
+// Thumb-nonce bump (bulk regen) → drop the memory cache ONCE per bump. Previously
+// every newly mounted <Thumb> invalidated itself whenever nonce > 0, so after any
+// regen each scroll/page change refetched every cover.
+let memNonce = 0
+export function syncThumbNonce(n: number): void {
+  if (n <= memNonce) return
+  memNonce = n
+  mem.clear()
+  pending.clear()
 }
 
 export function invalidateThumb(workId: string): void {

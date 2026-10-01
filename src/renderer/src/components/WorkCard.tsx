@@ -5,6 +5,7 @@ import { useStore } from '../store'
 import { allTags, tagToken } from '../util'
 import { invalidate } from '../images'
 import Thumb from './Thumb'
+import { ArtistLinks } from './ArtistLinks'
 import Stars from './Stars'
 import TagList from './TagList'
 import KoreanFinder from './KoreanFinder'
@@ -24,6 +25,8 @@ export default function WorkCard({ work }: { work: Work }): JSX.Element {
   const setFilter = useStore((s) => s.setFilter)
   const addSearchToken = useStore((s) => s.addSearchToken)
   const upsertWork = useStore((s) => s.upsertWork)
+  const toggleUnifiedFav = useStore((s) => s.toggleUnifiedFav)
+  const onlineFavs = useStore((s) => s.onlineFavs)
   const removeWork = useStore((s) => s.removeWork)
   const favoriteTags = useStore((s) => s.settings.favoriteTags)
   const [adding, setAdding] = useState(false)
@@ -69,10 +72,15 @@ export default function WorkCard({ work }: { work: Work }): JSX.Element {
 
   const toggleFav = async (e: React.MouseEvent): Promise<void> => {
     e.stopPropagation()
-    const updated = await window.api.setFavorite(work.id, !work.favorite)
+    // Coded (hitomi) works share ONE favorite with the online side.
+    if (work.code && !/^https?:/.test(work.code)) {
+      await toggleUnifiedFav(work.code, { title: work.title, artist: work.artist, language: work.language, pageCount: work.pageCount })
+    } else {
+      upsertWork(await window.api.setFavorite(work.id, !work.favorite))
+    }
     invalidate(work.id)
-    upsertWork(updated)
   }
+  const isFav = work.favorite || !!(work.code && onlineFavs[work.code]?.favorite)
 
   const setRank = async (rank: number): Promise<void> => {
     upsertWork(await window.api.setRank(work.id, rank))
@@ -122,7 +130,7 @@ export default function WorkCard({ work }: { work: Work }): JSX.Element {
       <div className="work-info">
         <div className="work-title-row">
           <span className="work-title selectable">{work.title}</span>
-          <FavGroup favorite={work.favorite} onToggle={toggleFav} work={work} />
+          <FavGroup favorite={isFav} onToggle={toggleFav} work={work} />
         </div>
 
         <div className="work-meta">
@@ -137,21 +145,14 @@ export default function WorkCard({ work }: { work: Work }): JSX.Element {
           )}
           {work.language && ` · ${work.language}`}
           {work.artist && (
-            <span
-              className="artist-link"
-              onClick={(e) => {
-                e.stopPropagation()
-                setFilter({ kind: 'artist', value: work.artist! })
-              }}
-              onContextMenu={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                setCrossMenu({ x: e.clientX, y: e.clientY, query: tagToken(`artist:${work.artist}`), raw: work.artist! })
-              }}
-            >
+            <>
               {' · '}
-              {work.artist}
-            </span>
+              <ArtistLinks
+                artist={work.artist}
+                onPick={(a) => setFilter({ kind: 'artist', value: a })}
+                onMenu={(a, e) => setCrossMenu({ x: e.clientX, y: e.clientY, query: tagToken(`artist:${a}`), raw: a })}
+              />
+            </>
           )}
         </div>
 

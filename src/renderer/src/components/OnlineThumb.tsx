@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { JSX, ReactNode } from 'react'
 import { useStore } from '../store'
 import { PreviewPortal } from './Thumb'
+import { loadThumb, peekThumb } from '../thumbs'
 
 // Online-card thumbnail with the same hover-to-peek preview as local Thumb. The
 // image list is supplied by `getImgs` (hitomi = direct; toki = series→first
@@ -11,15 +12,29 @@ export default function OnlineThumb({
   getImgs,
   thumbUrl,
   children,
-  className = 'gcard-thumb'
+  className = 'gcard-thumb',
+  localWorkId
 }: {
   getImgs: () => Promise<string[]>
   thumbUrl: string | null
   children?: ReactNode
   className?: string
+  // When the gallery is already in the local library, show its local cover thumb
+  // (instant, offline) instead of the remote thumbUrl.
+  localWorkId?: string
 }): JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
   const previewOn = useStore((s) => s.settings.thumbHoverPreview !== false)
+  const [localSrc, setLocalSrc] = useState<string | null>(() => (localWorkId ? peekThumb(localWorkId) ?? null : null))
+  useEffect(() => {
+    if (!localWorkId) return setLocalSrc(null)
+    let alive = true
+    loadThumb(localWorkId).then((s) => alive && setLocalSrc(s))
+    return () => {
+      alive = false
+    }
+  }, [localWorkId])
+  const shownThumb = localSrc ?? thumbUrl
   const enterTimer = useRef<number | undefined>(undefined)
   const [preview, setPreview] = useState(false)
   const [rect, setRect] = useState<DOMRect | null>(null)
@@ -66,10 +81,10 @@ export default function OnlineThumb({
 
   return (
     <div className={className} ref={ref} onMouseEnter={onEnter} onMouseLeave={onLeave}>
-      {thumbUrl ? <img src={thumbUrl} loading="lazy" alt="" /> : <div className="thumb-ph" />}
+      {shownThumb ? <img src={shownThumb} loading="lazy" alt="" /> : <div className="thumb-ph" />}
       {children}
       {preview && rect && imgs && imgs.length > 0 && (
-        <PreviewPortal rect={rect} src={imgs[idx]} page={idx + 1} total={imgs.length} />
+        <PreviewPortal rect={rect} src={imgs[idx]} page={idx + 1} total={imgs.length} onClose={onLeave} />
       )}
     </div>
   )

@@ -15,6 +15,11 @@ export function allTags(w: Work): string[] {
 // are used as-is; a bare tag gets the `tag:` namespace. Spaces → underscore so
 // the token survives the whitespace tokenizer. (Fixes the old `tag:female:…`
 // double-prefix.)
+// "A, B" → ["A", "B"] (multi-artist works store a comma-joined string).
+export function splitArtists(s: string | null | undefined): string[] {
+  return (s ?? '').split(',').map((a) => a.trim()).filter(Boolean)
+}
+
 export function tagToken(t: string): string {
   const body = t.includes(':') ? t : `tag:${t}`
   return body.replace(/\s+/g, '_')
@@ -127,7 +132,7 @@ function matchesFilter(w: Work, f: Filter): boolean {
     case 'favorites':
       return w.favorite
     case 'artist':
-      return (w.artist ?? '').toLowerCase() === f.value.toLowerCase()
+      return splitArtists(w.artist).some((a) => a.toLowerCase() === f.value.toLowerCase())
     case 'tag':
       return allTags(w).some((t) => t.toLowerCase() === f.value.toLowerCase())
     case 'favlists':
@@ -538,4 +543,15 @@ export const SORT_LABELS: Record<SortMode, string> = {
   title: '이름순',
   artist: '작가순',
   popular: '인기순'
+}
+
+// Normalized series-title key used to link a local general-manga series with its
+// online (toki) counterpart — they share no id, only the title. Drops bracketed
+// groups, punctuation and whitespace, lowercases.
+export function titleKey(s: string): string {
+  return (s || '')
+    .toLowerCase()
+    .replace(/[[(【<{（][^\][)】>}）]*[\])】>}）]/g, ' ')
+    .replace(/[\s_~～〜·・|/\:\-!?.,'"]+/g, '')
+    .trim()
 }

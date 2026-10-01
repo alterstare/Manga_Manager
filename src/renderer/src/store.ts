@@ -1,18 +1,24 @@
 import { create } from 'zustand'
 import type { Work, Settings, SortMode, SessionState, OnlineFav, FitMode } from '../../shared/types'
-import { DEFAULT_SETTINGS } from '../../shared/types'
+import { DEFAULT_SETTINGS, SPLIT_SETTING_KEYS } from '../../shared/types'
 import type { HitomiListSource, HitomiProgress, TokiChapter, UpdateStatus } from '../../shared/ipc'
 import { exportWorkText, exportWorkImages } from './export'
-import { warmThumbs } from './thumbs'
+import { warmThumbs, invalidateThumb } from './thumbs'
 import { convertWorkToWebp } from './convert'
-import { thumbTargetIds } from './util'
+import { thumbTargetIds, groupSeries, titleKey } from './util'
 
 // Merge the active mode's per-mode overrides over the base settings so hitomi and
 // general-manga keep independent display/reader/sort prefs. The result still
 // carries `perMode`, so it round-trips through saveSettings unchanged.
 function effectiveSettings(s: Settings, mode: 'hitomi' | 'normal'): Settings {
   const overlay = s.perMode?.[mode]
-  return overlay ? { ...s, ...overlay } : s
+  if (!overlay) return s
+  // Only keys that are still split apply — stale overlay entries from keys that
+  // became shared (e.g. theme) must not shadow the shared value.
+  const picked = Object.fromEntries(
+    SPLIT_SETTING_KEYS.filter((k) => k in overlay).map((k) => [k, overlay[k]])
+  ) as Partial<Settings>
+  return { ...s, ...picked }
 }
 
 export interface OnlineGallery {
@@ -227,6 +233,12 @@ interface AppState {
   installUpdate: () => void // quit + install the downloaded update
   needDownloadDir: boolean // download attempted with no destination folder → prompt
   setNeedDownloadDir: (v: boolean) => void
+  favDownloadedOnly: boolean // local favorites view: show only already-downloaded entries
+  setFavDownloadedOnly: (v: boolean) => void
+  favOnlineOnly: boolean // online favorites view: show only online favorites (exclude local-only)
+  setFavOnlineOnly: (v: boolean) => void
+  onlineListFav: boolean // reader's left online list shows favorites (opened from fav view)
+  setOnlineListFav: (v: boolean) => void
 
   // Job helpers + the tasks that run through them (kept in the store so they
   // survive view switches — progress + completion show in the global activity bar).
@@ -386,6 +398,12 @@ interface AppState {
   setOnlineProgress: (code: string, p: { scrollTop: number; pageIdx: number }) => void
   setOnlineFavs: (list: OnlineFav[]) => void
   toggleOnlineFav: (code: string, meta?: Partial<OnlineFav>) => Promise<void>
+  // Unified favorite toggle: flips BOTH the online favorite and (if the gallery is
+  // in the local library) the local favorite, so a favorite is one state everywhere.
+  toggleUnifiedFav: (code: string, meta?: Partial<OnlineFav>) => Promise<void>
+  // General-manga unified favorite: a local series (by key) and its online toki
+  // series (by url) are linked by normalized title and toggled together.
+  toggleNormalUnifiedFav: (p: { title: string; localKey?: string; url?: string; meta?: Partial<OnlineFav> }) => Promise<void>
   setOnlineRank: (code: string, rank: number, meta?: Partial<OnlineFav>) => Promise<void>
 }
 
@@ -551,7 +569,7 @@ export const useStore = create<AppState>((set, get) => ({
   searchSeed: null,
   sort: 'random',
   sortDir: 'desc',
-  favSort: 'rank',
+  favSort: 'recent',
   filter: { kind: 'all' },
   randomSeed: Math.random(),
   popularRanks: null,
@@ -576,6 +594,9 @@ export const useStore = create<AppState>((set, get) => ({
   activityOpen: false,
   update: null,
   needDownloadDir: false,
+  favDownloadedOnly: false,
+  favOnlineOnly: false,
+  onlineListFav: false,
 
   setWorks: (works) => set({ works }),
   upsertWork: (w) => set((st) => ({ works: st.works.map((x) => (x.id === w.id ? w : x)) })),
@@ -1417,6 +1438,9 @@ export const useStore = create<AppState>((set, get) => ({
   setUpdate: (s) => set({ update: s }),
   installUpdate: () => window.api.installUpdate(),
   setNeedDownloadDir: (v) => set({ needDownloadDir: v }),
+  setFavDownloadedOnly: (v) => set({ favDownloadedOnly: v }),
+  setFavOnlineOnly: (v) => set({ favOnlineOnly: v }),
+  setOnlineListFav: (v) => set({ onlineListFav: v }),
   clearDoneJobs: () =>
     set((st) => ({
       jobs: st.jobs.filter((j) => j.status === 'running'),
@@ -1611,8 +1635,80 @@ export const useStore = create<AppState>((set, get) => ({
     const fav = await window.api.setOnlineFav(code, { favorite: !cur?.favorite }, meta)
     set((st) => ({ onlineFavs: applyFav(st.onlineFavs, fav) }))
   },
+  toggleUnifiedFav: async (code, meta) => {
+    const st = get()
+    const work = st.works.find((w) => w.code === code)
+    const on = !!st.onlineFavs[code]?.favorite || !!work?.favorite
+    const next = !on
+    // Online favorite state.
+    const fav = await window.api.setOnlineFav(code, { favorite: next }, meta)
+    set((s) => ({ onlineFavs: applyFav(s.onlineFavs, fav) }))
+    // Local favorite state (folder-as-truth: moves into/out of the favorites dir).
+    if (work) get().upsertWork(await window.api.setFavorite(work.id, next))
+  },
+  toggleNormalUnifiedFav: async ({ title, localKey, url, meta }) => {
+    const st = get()
+    const k = titleKey(title)
+    const s = st.settings
+    const roots = [...(s.normalRoots ?? []), s.normalFavoritesDir].filter(Boolean) as string[]
+    const localKeys = localKey
+      ? [localKey]
+      : k
+        ? groupSeries(st.works.filter((w) => (w.library ?? 'hitomi') === 'normal'), roots)
+            .filter((g) => titleKey(g.title) === k)
+            .map((g) => g.key)
+        : []
+    const urls = new Set<string>(url ? [url] : [])
+    if (k) {
+      for (const f of Object.values(st.onlineFavs)) {
+        if (/^https?:/.test(f.code) && titleKey(f.title) === k) urls.add(f.code)
+      }
+    }
+    const favS = s.normalFavSeries ?? []
+    const on = localKeys.some((x) => favS.includes(x)) || [...urls].some((u) => st.onlineFavs[u]?.favorite)
+    const next = !on
+    for (const x of localKeys) await get().toggleNormalFav('series', x, next)
+    for (const u of urls) {
+      const fav = await window.api.setOnlineFav(u, { favorite: next }, { title, ...meta })
+      set((x) => ({ onlineFavs: applyFav(x.onlineFavs, fav) }))
+    }
+  },
   setOnlineRank: async (code, rank, meta) => {
     const fav = await window.api.setOnlineFav(code, { rank }, meta)
     set((st) => ({ onlineFavs: applyFav(st.onlineFavs, fav) }))
   }
 }))
+
+// Background thumbnail warm-up whenever the works list changes (boot, downloads,
+// folder rescans, moves) — not only on a full library scan. Each id is checked
+// once per session: existing thumbs just resolve from disk into the memory cache,
+// missing ones are generated now instead of while the user scrolls.
+const warmedIds = new Map<string, number>() // workId → pageCount when checked
+let warmTimer: number | undefined
+useStore.subscribe((st, prev) => {
+  // Bulk cover regen → re-check every thumb (new raw covers get shrunk).
+  if (st.thumbNonce !== prev.thumbNonce) warmedIds.clear()
+  if (st.works === prev.works && st.settings === prev.settings && st.thumbNonce === prev.thumbNonce) return
+  window.clearTimeout(warmTimer)
+  warmTimer = window.setTimeout(() => {
+    const { works, settings: s, startJob, updateJob, endJob } = useStore.getState()
+    const normalRoots = [s.normalRoots, s.normalFavoritesDir, s.normalDownloadDir].flat().filter(Boolean) as string[]
+    for (const mode of ['hitomi', 'normal'] as const) {
+      // Keyed by page count too: a work registered mid-download (no images yet →
+      // "no cover" cached) gets re-checked once its pages land, without a restart.
+      const pc = new Map(works.map((w) => [w.id, w.pageCount]))
+      const ids = thumbTargetIds(works, mode, normalRoots).filter((id) => warmedIds.get(id) !== pc.get(id))
+      if (!ids.length) continue
+      for (const id of ids) {
+        if (warmedIds.has(id)) invalidateThumb(id) // pages changed → re-resolve
+        warmedIds.set(id, pc.get(id) ?? 0)
+      }
+      // Small batches (a finished download) run silently; big ones show progress.
+      const job = ids.length >= 20 ? startJob('thumb', mode, '썸네일 준비') : null
+      if (job) updateJob(job, { total: ids.length })
+      warmThumbs(ids, job ? (done, total) => updateJob(job, { done, total }) : undefined)
+        .then(() => job && endJob(job, { status: 'done', detail: `${ids.length}개` }))
+        .catch((e: any) => job && endJob(job, { status: 'error', error: String(e?.message ?? e) }))
+    }
+  }, 500)
+})

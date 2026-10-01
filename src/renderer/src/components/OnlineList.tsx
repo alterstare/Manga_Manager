@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { JSX } from 'react'
 import { useStore } from '../store'
 import type { GallerySummary, HitomiListSource, OnlineSort } from '../../../shared/ipc'
@@ -10,7 +10,8 @@ import Dropdown from './Dropdown'
 import { CheckIcon, PauseIcon, PlayIcon, LanguageIcon, SearchIcon, FavoriteIcon, DownloadIcon, SyncIcon } from './icons'
 import OnlineThumb from './OnlineThumb'
 import { getOnlineImages } from '../images'
-import { favMeta, tagToken } from '../util'
+import { favMeta, tagToken, allTags } from '../util'
+import { useFavSummaries, getFavSummary } from '../favSummaries'
 import type { OnlineGallery, DownloadItem } from '../store'
 
 const SORTS: [OnlineSort, string][] = [
@@ -34,7 +35,7 @@ export default function OnlineList(): JSX.Element {
   const retryDownload = useStore((s) => s.retryDownload)
   const downloads = useStore((s) => s.downloads)
   const onlineFavs = useStore((s) => s.onlineFavs)
-  const toggleOnlineFav = useStore((s) => s.toggleOnlineFav)
+  const toggleUnifiedFav = useStore((s) => s.toggleUnifiedFav)
   const setOnlineRank = useStore((s) => s.setOnlineRank)
   const goBrowse = useStore((s) => s.goBrowse)
   const source = useStore((s) => s.browseSource)
@@ -53,8 +54,45 @@ export default function OnlineList(): JSX.Element {
   const [crossMenu, setCrossMenu] = useState<{ x: number; y: number; query: string; raw: string } | null>(null)
   const searchLocal = useStore((s) => s.searchLocal)
   const addFavoriteTag = useStore((s) => s.addFavoriteTag)
+  // Opened from the favorites view → show the unified favorites list (online favs
+  // + locally-favorited works) instead of the latest online listing.
+  const onlineListFav = useStore((s) => s.onlineListFav)
+  const works = useStore((s) => s.works)
+  const favCodesL = useMemo(
+    () => Object.values(onlineFavs).filter((f) => f.favorite && /^\d+$/.test(f.code)).map((f) => f.code),
+    [onlineFavs]
+  )
+  const sumVerL = useFavSummaries(onlineListFav ? favCodesL : [])
+  const favList = useMemo<GallerySummary[]>(() => {
+    const seen = new Set<string>()
+    const out: GallerySummary[] = []
+    for (const f of Object.values(onlineFavs)) {
+      if (!f.favorite || /^https?:/.test(f.code) || seen.has(f.code)) continue
+      seen.add(f.code)
+      const lw = works.find((w) => w.code === f.code)
+      out.push({ code: f.code, title: f.title, artists: f.artist ? [f.artist] : [], tags: lw ? allTags(lw) : getFavSummary(f.code)?.tags ?? [], language: f.language, type: null, pageCount: f.pageCount, thumbUrl: f.thumbUrl })
+    }
+    for (const w of works) {
+      if (!w.favorite || !w.code || /^https?:/.test(w.code) || seen.has(w.code)) continue
+      seen.add(w.code)
+      out.push({ code: w.code, title: w.title, artists: w.artist ? [w.artist] : [], tags: allTags(w), language: w.language, type: null, pageCount: w.pageCount, thumbUrl: null })
+    }
+    return out
+  }, [onlineFavs, works, sumVerL])
+  const displayItems = onlineListFav ? favList : items
+  const codeWorkId = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const w of works) if (w.code) m.set(w.code, w.id)
+    return m
+  }, [works])
+  const localFavCodes = useMemo(
+    () => new Set(works.filter((w) => w.favorite && w.code).map((w) => w.code!) as string[]),
+    [works]
+  )
+  const isFav = (code: string): boolean => !!onlineFavs[code]?.favorite || localFavCodes.has(code)
 
   useEffect(() => {
+    if (onlineListFav) return // favorites are computed locally; no fetch
     let alive = true
     setLoading(true)
     setError(null)
@@ -70,7 +108,7 @@ export default function OnlineList(): JSX.Element {
     return () => {
       alive = false
     }
-  }, [source, page])
+  }, [source, page, onlineListFav])
 
   const lang = source.language
   const apply = (): void => {
@@ -131,7 +169,7 @@ export default function OnlineList(): JSX.Element {
       <div className="lib-list-scroll">
         {error && <div className="warn err">{error}</div>}
         {loading && <div className="reader-loading">불러오는 중…</div>}
-        {items.map((g) => (
+        {displayItems.map((g) => (
           <div
             key={g.code}
             className={`lib-item ${g.code === activeCode ? 'active' : ''}`}
@@ -168,7 +206,7 @@ export default function OnlineList(): JSX.Element {
               })
             }}
           >
-            <OnlineThumb getImgs={() => getOnlineImages(g.code)} thumbUrl={g.thumbUrl} className="lib-thumb" />
+            <OnlineThumb getImgs={() => getOnlineImages(g.code)} thumbUrl={g.thumbUrl} className="lib-thumb" localWorkId={codeWorkId.get(g.code)} />
             <div className="lib-item-info">
               <div className="lib-item-title selectable">{g.title}</div>
               <div className="lib-item-meta">
@@ -264,21 +302,21 @@ export default function OnlineList(): JSX.Element {
                     )
                   })()}
                   <span
-                    className={`lib-heart ${onlineFavs[g.code]?.favorite ? 'on' : ''}`}
+                    className={`lib-heart ${isFav(g.code) ? 'on' : ''}`}
                     title="즐겨찾기"
                     onClick={(e) => {
                       e.stopPropagation()
-                      toggleOnlineFav(g.code, favMeta(g))
+                      toggleUnifiedFav(g.code, favMeta(g))
                     }}
                   >
-                    <FavoriteIcon filled={!!onlineFavs[g.code]?.favorite} />
+                    <FavoriteIcon filled={isFav(g.code)} />
                   </span>
                 </div>
               </div>
             </div>
           </div>
         ))}
-        <Pager page={page} lastPage={lastPage} onPage={setBrowsePage} small />
+        {!onlineListFav && <Pager page={page} lastPage={lastPage} onPage={setBrowsePage} small />}
       </div>
       {menu && (
         <ContextMenu

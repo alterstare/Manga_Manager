@@ -131,6 +131,7 @@ export class Store {
       groups: locAuth ? w.groups : prev.groups,
       homePath: locAuth ? w.homePath : prev.homePath,
       rank: prev.rank,
+      favoritedAt: prev.favoritedAt,
       viewCount: prev.viewCount,
       lastViewedAt: prev.lastViewedAt,
       addedAt: prev.addedAt,

@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { JSX } from 'react'
 import { useStore } from '../store'
-import { selectWorks, allTags, matchesSearch, analyzeSeries, seriesOf, tagToken, artistFolderOf } from '../util'
+import { selectWorks, allTags, matchesSearch, analyzeSeries, seriesOf, tagToken, artistFolderOf, titleKey } from '../util'
 import type { SortMode, Work } from '../../../shared/types'
 import Thumb from './Thumb'
 import Stars from './Stars'
-import { SearchIcon } from './icons'
+import { SearchIcon, AutoStoriesIcon } from './icons'
 import FavGroup from './FavGroup'
 import { ChapterRow } from './SeriesCard'
 import ContextMenu from './ContextMenu'
@@ -37,6 +37,9 @@ export default function LibraryList(): JSX.Element {
   const upsertWork = useStore((s) => s.upsertWork)
   const createGroup = useStore((s) => s.createGroup)
   const setReadingQueue = useStore((s) => s.setReadingQueue)
+  const favSeries = useStore((s) => s.settings.normalFavSeries)
+  const onlineFavs = useStore((s) => s.onlineFavs)
+  const toggleNormalUnifiedFav = useStore((s) => s.toggleNormalUnifiedFav)
 
   const [input, setInput] = useState('')
   const [applied, setApplied] = useState('')
@@ -71,6 +74,13 @@ export default function LibraryList(): JSX.Element {
     () => (isNormalActive && activeWork ? seriesOf(activeWork, works, normalRoots) : null),
     [isNormalActive, activeWork, works, normalRoots]
   )
+
+  const seriesFav = useMemo(() => {
+    if (!activeGroup) return false
+    if ((favSeries ?? []).includes(activeGroup.key)) return true
+    const k = titleKey(activeGroup.title)
+    return !!k && Object.values(onlineFavs).some((f) => f.favorite && /^https?:/.test(f.code) && titleKey(f.title) === k)
+  }, [activeGroup, favSeries, onlineFavs])
 
   const list = useMemo(() => {
     if (activeGroup) {
@@ -170,7 +180,21 @@ export default function LibraryList(): JSX.Element {
     <div className="lib-list">
       {isNormalActive && (
         <div className="lib-list-head">
-          <span className="lib-series-label">📖 시리즈 · {list.length}화</span>
+          <span className="lib-series-label wide">
+            <AutoStoriesIcon /> 시리즈 · {list.length}화
+            {activeGroup && activeGroup.chapters[0] && (
+              <span className="lib-series-actions">
+                {/* Series-level favorite (unified with the online toki favorite of the
+                    same title) + group for every chapter — same as the home card. */}
+                <FavGroup
+                  favorite={seriesFav}
+                  onToggle={() => void toggleNormalUnifiedFav({ title: activeGroup.title, localKey: activeGroup.key })}
+                  work={activeGroup.chapters[0]}
+                  applyTo={activeGroup.chapters}
+                />
+              </span>
+            )}
+          </span>
         </div>
       )}
       <div className="lib-search-row">

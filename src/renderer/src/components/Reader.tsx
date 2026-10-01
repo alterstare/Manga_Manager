@@ -3,7 +3,7 @@ import type { JSX } from 'react'
 import { useStore } from '../store'
 import { getImages, getOnlineImages } from '../images'
 import { getTokiChapters } from '../toki'
-import { analyzeSeries, seriesOf } from '../util'
+import { analyzeSeries, seriesOf, splitArtists } from '../util'
 import type { TokiChapter } from '../../../shared/ipc'
 import type { FitMode } from '../../../shared/types'
 import { filterExcluded, getExcluded, hasExclusions } from '../exclude'
@@ -27,6 +27,9 @@ const FIT_ICON: Record<FitMode, JSX.Element> = {
   cover: <FullscreenIcon />
 }
 const FIT_ORDER: FitMode[] = ['contain', 'width', 'height', 'cover']
+// Scroll mode: only width/height fit — contain ≈ height fit there, and cover just
+// crops pages that width fit already shows whole.
+const SCROLL_FIT_ORDER: FitMode[] = ['width', 'height']
 
 // <img> style for a fit mode given the (zoom-scaled) pane box. `sw`/`sh` are the
 // available width/height in px. width/height fit one axis; contain fits inside
@@ -176,7 +179,16 @@ export default function Reader({
   }
   // Fit mode (page sizing). Tab's own value wins, else this library's last-used,
   // else contain. Persisted per library, survives restart.
-  const fit: FitMode = (side === 'right' ? tab?.rightFit : tab?.fit) ?? lastFit?.[libMode] ?? 'contain'
+  const storedFit: FitMode = (side === 'right' ? tab?.rightFit : tab?.fit) ?? lastFit?.[libMode] ?? 'contain'
+  const fit: FitMode =
+    mode === 'scroll' && !SCROLL_FIT_ORDER.includes(storedFit)
+      ? storedFit === 'cover'
+        ? 'width'
+        : 'height'
+      : storedFit
+  const fitOrder = mode === 'scroll' ? SCROLL_FIT_ORDER : FIT_ORDER
+  // Spread + cover: natural aspect (h/w) of the shown pages, to size them by hand.
+  const [spreadRatios, setSpreadRatios] = useState<Record<string, number>>({})
   const onlineProgress = useStore((s) => s.onlineProgress)
   const setOnlineProgress = useStore((s) => s.setOnlineProgress)
   const reloadNonce = useStore((s) => s.reloadNonce)
@@ -678,12 +690,29 @@ export default function Reader({
     setLastZoom(libMode, 1)
   }
   const onZoomButton = (): void => {
-    if (atFit) applyFit(FIT_ORDER[(FIT_ORDER.indexOf(fit) + 1) % FIT_ORDER.length])
+    if (atFit) applyFit(fitOrder[(fitOrder.indexOf(fit) + 1) % fitOrder.length])
     else {
       heightsRef.current = []
       setZoom(1) // custom → back to the fit mode
     }
   }
+
+  useEffect(() => {
+    if (mode !== 'spread' || fit !== 'cover') return
+    let alive = true
+    for (const src of [images[pageIdx], images[pageIdx + 1]]) {
+      if (!src || spreadRatios[src]) continue
+      const im = new Image()
+      im.onload = () => {
+        if (alive && im.naturalWidth)
+          setSpreadRatios((m) => ({ ...m, [src]: im.naturalHeight / im.naturalWidth }))
+      }
+      im.src = src
+    }
+    return () => {
+      alive = false
+    }
+  }, [mode, fit, images, pageIdx, spreadRatios])
 
   // keyboard paging
   useEffect(() => {
@@ -758,16 +787,33 @@ export default function Reader({
         )}
         <h2>{title}</h2>
         {artist &&
-          (online?.kind === 'toki' ? (
-            <span
-              className="reader-artist link"
-              onClick={() => searchTokiAuthor(artist)}
-            >
-              {artist}
-            </span>
-          ) : (
-            <span className="reader-artist">{artist}</span>
-          ))}
+          (() => {
+            // First artist always shows; the rest only in space the title leaves
+            // (whole names — ones that don't fit wrap onto a hidden line).
+            const [first, ...rest] = splitArtists(artist)
+            const one = (a: string): JSX.Element =>
+              online?.kind === 'toki' ? (
+                <span className="reader-artist link" onClick={() => searchTokiAuthor(a)}>
+                  {a}
+                </span>
+              ) : (
+                <span className="reader-artist">{a}</span>
+              )
+            return (
+              <>
+                {first && one(first)}
+                {rest.length > 0 && (
+                  <span className="reader-artist-more">
+                    {rest.map((a, i) => (
+                      <span key={a + i} className="reader-artist-item">
+                        ,&nbsp;{one(a)}
+                      </span>
+                    ))}
+                  </span>
+                )}
+              </>
+            )
+          })()}
         {online && <span className="online-badge">ONLINE</span>}
         <span className="reader-pages">{images.length}p</span>
         {online && online.kind !== 'toki' ? (
@@ -850,16 +896,34 @@ export default function Reader({
             {/* Page order per setting: 'left' = next page on the left (manga
                 right-to-left), 'right' = next page on the right (left-to-right). */}
             {(spreadNextSide === 'left' ? [pageIdx + 1, pageIdx] : [pageIdx, pageIdx + 1]).map(
-              (idx) =>
-                images[idx] && (
+              (idx) => {
+                if (!images[idx]) return null
+                const half = Math.round(sw / 2)
+                const img = (style: React.CSSProperties): JSX.Element => (
                   <TranslatedImage
                     key={idx}
                     src={images[idx]}
                     translate={idx === pageIdx ? translate : false}
                     langHint={langHint}
-                    style={fitStyle(fit, Math.round(sw / 2), sh)}
+                    style={style}
                   />
                 )
+                if (fit !== 'cover') return img(fitStyle(fit, half, sh))
+                // Cover without object-fit: size the WHOLE image to cover the cell and
+                // clip with the cell. object-fit:cover draws a cropped sub-rect, which
+                // skips Chromium's mipmapped downscale → jagged (aliased) lines.
+                const r = spreadRatios[images[idx]]
+                const style: React.CSSProperties = !r
+                  ? fitStyle('contain', half, sh)
+                  : r > sh / half
+                    ? { width: half, height: Math.round(half * r), maxWidth: 'none', maxHeight: 'none' }
+                    : { height: sh, width: Math.round(sh / r), maxWidth: 'none', maxHeight: 'none' }
+                return (
+                  <div key={idx} className="spread-cell" style={{ width: half, height: sh }}>
+                    {img(style)}
+                  </div>
+                )
+              }
             )}
           </div>
           <div className="paged-hint left">‹</div>

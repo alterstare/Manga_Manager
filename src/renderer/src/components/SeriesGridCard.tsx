@@ -2,8 +2,9 @@ import { useState } from 'react'
 import type { JSX } from 'react'
 import type { SeriesGroup } from '../util'
 import { useStore } from '../store'
-import { allTags, tagToken, CHAP_FAV_PREFIX } from '../util'
+import { allTags, tagToken, CHAP_FAV_PREFIX, titleKey } from '../util'
 import Thumb from './Thumb'
+import { ArtistLinks } from './ArtistLinks'
 import Stars from './Stars'
 import TagList from './TagList'
 import FavGroup from './FavGroup'
@@ -22,6 +23,12 @@ export default function SeriesGridCard({ series }: { series: SeriesGroup }): JSX
   const favoriteTags = useStore((s) => s.settings.favoriteTags)
   const toggleNormalFav = useStore((s) => s.toggleNormalFav)
   const favSeries = useStore((s) => s.settings.normalFavSeries)
+  const toggleNormalUnifiedFav = useStore((s) => s.toggleNormalUnifiedFav)
+  // Same series favorited online (toki) → counts as favorited here too.
+  const onlineTitleFav = useStore((s) => {
+    const k = titleKey(series.title)
+    return !!k && Object.values(s.onlineFavs).some((f) => f.favorite && /^https?:/.test(f.code) && titleKey(f.title) === k)
+  })
   const favChapters = useStore((s) => s.settings.normalFavChapters)
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
   const [crossMenu, setCrossMenu] = useState<{ x: number; y: number; query: string; raw: string } | null>(null)
@@ -40,13 +47,13 @@ export default function SeriesGridCard({ series }: { series: SeriesGroup }): JSX
   const isChapterEntry = series.key.startsWith(CHAP_FAV_PREFIX)
   const isFav = isChapterEntry
     ? (favChapters ?? []).includes(rep?.id ?? '')
-    : (favSeries ?? []).includes(series.key)
+    : (favSeries ?? []).includes(series.key) || onlineTitleFav
   const favAll = async (e: React.MouseEvent): Promise<void> => {
     e.stopPropagation()
     if (isChapterEntry) {
       if (rep) await toggleNormalFav('chapter', rep.id, !isFav)
     } else {
-      await toggleNormalFav('series', series.key, !isFav)
+      await toggleNormalUnifiedFav({ title: series.title, localKey: series.key })
     }
   }
   const rankAll = async (r: number): Promise<void> => {
@@ -64,7 +71,7 @@ export default function SeriesGridCard({ series }: { series: SeriesGroup }): JSX
 
   return (
     <div
-      className="gtile"
+      className="gtile series"
       onClickCapture={(e) => {
         // Dragging to select/copy text must not open a tab.
         if (window.getSelection()?.toString()) return e.stopPropagation()
@@ -100,7 +107,14 @@ export default function SeriesGridCard({ series }: { series: SeriesGroup }): JSX
       </div>
       <div className="gtile-title selectable">{series.title}</div>
       <div className="gtile-meta">
-        전체 {chapters.length}화{artist && ` · ${artist}`}
+        전체 {chapters.length}화{artist && ' · '}
+        {artist && (
+          <ArtistLinks
+            artist={artist}
+            onPick={(a) => addSearchToken(tagToken(`artist:${a}`))}
+            onMenu={(a, e) => setCrossMenu({ x: e.clientX, y: e.clientY, query: tagToken(`artist:${a}`), raw: a })}
+          />
+        )}
       </div>
       <div className="gtile-tags">
         {rep && (
@@ -113,7 +127,7 @@ export default function SeriesGridCard({ series }: { series: SeriesGroup }): JSX
             onRemove={removeTag}
             onAddClick={adding ? undefined : () => setAdding(true)}
             singleLine={false}
-            max={6}
+            lines={2}
           />
         )}
         {adding && (

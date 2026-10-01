@@ -5,6 +5,7 @@ import { useStore } from '../store'
 import { allTags, tagToken } from '../util'
 import { invalidateThumb } from '../thumbs'
 import Thumb from './Thumb'
+import { ArtistLinks } from './ArtistLinks'
 import Stars from './Stars'
 import TagList from './TagList'
 import FavGroup from './FavGroup'
@@ -23,6 +24,8 @@ export default function WorkGridCard({ work }: { work: Work }): JSX.Element {
   const setFilter = useStore((s) => s.setFilter)
   const addSearchToken = useStore((s) => s.addSearchToken)
   const upsertWork = useStore((s) => s.upsertWork)
+  const toggleUnifiedFav = useStore((s) => s.toggleUnifiedFav)
+  const onlineFavs = useStore((s) => s.onlineFavs)
   const favoriteTags = useStore((s) => s.settings.favoriteTags)
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
   const [crossMenu, setCrossMenu] = useState<{ x: number; y: number; query: string; raw: string } | null>(null)
@@ -31,10 +34,15 @@ export default function WorkGridCard({ work }: { work: Work }): JSX.Element {
 
   const toggleFav = async (e: React.MouseEvent): Promise<void> => {
     e.stopPropagation()
-    const updated = await window.api.setFavorite(work.id, !work.favorite)
+    // Coded (hitomi) works share ONE favorite with the online side.
+    if (work.code && !/^https?:/.test(work.code)) {
+      await toggleUnifiedFav(work.code, { title: work.title, artist: work.artist, language: work.language, pageCount: work.pageCount })
+    } else {
+      upsertWork(await window.api.setFavorite(work.id, !work.favorite))
+    }
     invalidateThumb(work.id)
-    upsertWork(updated)
   }
+  const isFav = work.favorite || !!(work.code && onlineFavs[work.code]?.favorite)
 
   const addTag = async (): Promise<void> => {
     const t = newTag.trim()
@@ -80,7 +88,7 @@ export default function WorkGridCard({ work }: { work: Work }): JSX.Element {
       </div>
       <div className="gtile-foot" onClick={(e) => e.stopPropagation()}>
         <Stars rank={work.rank} onChange={async (r) => upsertWork(await window.api.setRank(work.id, r))} />
-        <FavGroup favorite={work.favorite} onToggle={toggleFav} work={work} />
+        <FavGroup favorite={isFav} onToggle={toggleFav} work={work} />
       </div>
       <div className="gtile-title selectable">{work.title}</div>
       <div className="gtile-meta">
@@ -101,24 +109,16 @@ export default function WorkGridCard({ work }: { work: Work }): JSX.Element {
         )}
         {work.language && ` · ${work.language}`}
       </div>
-      {work.artist && (
-        <div className="gtile-meta gtile-artist">
-          <span
-            className="artist-link"
-            onClick={(e) => {
-              e.stopPropagation()
-              setFilter({ kind: 'artist', value: work.artist! })
-            }}
-            onContextMenu={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              setCrossMenu({ x: e.clientX, y: e.clientY, query: tagToken(`artist:${work.artist}`), raw: work.artist! })
-            }}
-          >
-            {work.artist}
-          </span>
-        </div>
-      )}
+      {/* Artist line is always present (even empty) so every tile is the same height. */}
+      <div className="gtile-meta gtile-artist">
+        {work.artist && (
+          <ArtistLinks
+            artist={work.artist}
+            onPick={(a) => setFilter({ kind: 'artist', value: a })}
+            onMenu={(a, e) => setCrossMenu({ x: e.clientX, y: e.clientY, query: tagToken(`artist:${a}`), raw: a })}
+          />
+        )}
+      </div>
       <div className="gtile-tags">
         <TagList
           tags={allTags(work)}
@@ -129,7 +129,7 @@ export default function WorkGridCard({ work }: { work: Work }): JSX.Element {
           onRemove={removeTag}
           onAddClick={adding ? undefined : () => setAdding(true)}
           singleLine={false}
-          max={6}
+          lines={5}
         />
         {adding && (
           <input

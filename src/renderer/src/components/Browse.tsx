@@ -10,10 +10,12 @@ import { getOnlineImages } from '../images'
 import CopyCode from './CopyCode'
 import ContextMenu from './ContextMenu'
 import Stars from './Stars'
-import { favMeta, tagTokens, tagToken, tokenLabel, FAV_BASE } from '../util'
+import { favMeta, tagTokens, tagToken, tokenLabel, FAV_BASE, allTags } from '../util'
+import { useFavSummaries, getFavSummary } from '../favSummaries'
 import Caret from './Caret'
 import Dropdown from './Dropdown'
-import { CheckIcon, PauseIcon, PlayIcon, SearchIcon, SyncIcon, GridIcon, MenuIcon, FavoriteIcon, DownloadIcon } from './icons'
+import { CheckIcon, PauseIcon, PlayIcon, SearchIcon, SyncIcon, GridIcon, MenuIcon, FavoriteIcon, DownloadIcon, LanguageIcon } from './icons'
+import FavDlToggle from './FavDlToggle'
 import type { OnlineGallery } from '../store'
 
 const LANGS = [
@@ -40,7 +42,7 @@ export default function Browse(): JSX.Element {
   const openSplitOnline = useStore((s) => s.openSplitOnline)
   const splitOpen = useStore((s) => !!s.tabs.find((t) => t.id === s.activeTabId)?.split)
   const onlineFavs = useStore((s) => s.onlineFavs)
-  const toggleOnlineFav = useStore((s) => s.toggleOnlineFav)
+  const toggleUnifiedFav = useStore((s) => s.toggleUnifiedFav)
   const setOnlineRank = useStore((s) => s.setOnlineRank)
   const startDownload = useStore((s) => s.startDownload)
   const stopDownload = useStore((s) => s.stopDownload)
@@ -54,7 +56,7 @@ export default function Browse(): JSX.Element {
   const downloads = useStore((s) => s.downloads)
   const works = useStore((s) => s.works)
   const [favMode, setFavMode] = useState(false)
-  const [favSort, setFavSort] = useState<'rank' | 'recent'>('rank')
+  const [favSort, setFavSort] = useState<'rank' | 'recent'>('recent')
   const onlineFavLists = useStore((s) => s.settings.onlineFavLists ?? [])
   const pageSize = useStore((s) => s.settings.pageSize || 50)
   const marginWidth = useStore((s) => s.settings.marginWidth)
@@ -207,23 +209,58 @@ export default function Browse(): JSX.Element {
 
   // "내 즐겨찾기" view: render the persisted online favorites instead of hitomi
   // results, sorted by rank or recency.
+  // Favorites are stored without tags → fetch their gallery summaries (cached).
+  const favCodes = useMemo(
+    () => Object.values(onlineFavs).filter((f) => f.favorite && /^\d+$/.test(f.code)).map((f) => f.code),
+    [onlineFavs]
+  )
+  const sumVer = useFavSummaries(favMode ? favCodes : [])
   const favGalleries = useMemo<GallerySummary[]>(() => {
-    // Numeric codes only — http codes belong to the general-manga (toki) mode.
-    const arr = Object.values(onlineFavs).filter((f) => f.favorite && !/^https?:/.test(f.code))
-    arr.sort((a, b) =>
-      favSort === 'rank' ? b.rank - a.rank || b.addedAt - a.addedAt : b.addedAt - a.addedAt
-    )
-    return arr.map((f) => ({
-      code: f.code,
-      title: f.title,
-      artists: f.artist ? [f.artist] : [],
-      tags: [],
-      language: f.language,
-      type: null,
-      pageCount: f.pageCount,
-      thumbUrl: f.thumbUrl
-    }))
-  }, [onlineFavs, favSort])
+    // Unified favorites: online favorites + locally-favorited coded works, deduped
+    // by code, sorted together by favorite time (최근 추가순) or rating.
+    const rows: { g: GallerySummary; t: number; r: number }[] = []
+    const seen = new Set<string>()
+    for (const f of Object.values(onlineFavs)) {
+      if (!f.favorite || /^https?:/.test(f.code) || seen.has(f.code)) continue
+      seen.add(f.code)
+      const sum = getFavSummary(f.code)
+      const local = works.find((w) => w.code === f.code)
+      rows.push({
+        g: {
+          code: f.code,
+          title: f.title,
+          artists: f.artist ? [f.artist] : sum?.artists ?? [],
+          tags: local ? allTags(local) : sum?.tags ?? [],
+          language: f.language ?? sum?.language ?? null,
+          type: null,
+          pageCount: f.pageCount,
+          thumbUrl: f.thumbUrl
+        },
+        t: f.addedAt,
+        r: Math.max(f.rank, local?.rank ?? 0)
+      })
+    }
+    for (const w of works) {
+      if (!w.favorite || !w.code || /^https?:/.test(w.code) || seen.has(w.code)) continue
+      seen.add(w.code)
+      rows.push({
+        g: {
+          code: w.code,
+          title: w.title,
+          artists: w.artist ? [w.artist] : [],
+          tags: allTags(w),
+          language: w.language,
+          type: null,
+          pageCount: w.pageCount,
+          thumbUrl: null
+        },
+        t: w.favoritedAt ?? 0,
+        r: w.rank
+      })
+    }
+    rows.sort((x, y) => (favSort === 'rank' ? y.r - x.r || y.t - x.t : y.t - x.t))
+    return rows.map((x) => x.g)
+  }, [onlineFavs, favSort, works, sumVer])
   // Checked online lists → fetch their gallery summaries (union of codes). '기본'
   // has no codes (it's the app's own online favorites), so it isn't fetched.
   useEffect(() => {
@@ -256,13 +293,6 @@ export default function Browse(): JSX.Element {
     return [...base, ...listGallery].filter((g) => !seen.has(g.code) && seen.add(g.code))
   }, [favMode, favSelected, items, favGalleries, listGallery])
 
-  // Favorites view paginates client-side (items-per-page is configurable).
-  const favLastPage = Math.max(0, Math.ceil(gallery.length / pageSize) - 1)
-  useEffect(() => setFavPage(0), [favMode, favSort, favSelected, gallery.length])
-  const base = favMode ? gallery : items
-  const ordered = reverse ? [...base].reverse() : base
-  const shown = favMode ? ordered.slice(favPage * pageSize, favPage * pageSize + pageSize) : ordered
-
   // Codes already present in the local library — regardless of whether they were
   // downloaded in-app or moved in from elsewhere. Used to show a card as "already
   // downloaded" (✓ + full bar) even without an active download job.
@@ -270,6 +300,36 @@ export default function Browse(): JSX.Element {
     () => new Set(works.map((w) => w.code).filter(Boolean) as string[]),
     [works]
   )
+  // code → local work id, so a downloaded gallery shows its local cover thumbnail.
+  const codeWorkId = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const w of works) if (w.code) m.set(w.code, w.id)
+    return m
+  }, [works])
+  // Codes favorited locally (heart in the library) — the card heart is "on" if the
+  // gallery is a favorite in EITHER system.
+  const localFavCodes = useMemo(
+    () => new Set(works.filter((w) => w.favorite && w.code).map((w) => w.code!) as string[]),
+    [works]
+  )
+
+  // Online favorites view: "ALL" (unified: online favs + local favorites) vs
+  // "온라인만" (only actual online favorites, hiding local-only merged entries).
+  const favOnlineOnly = useStore((s) => s.favOnlineOnly)
+  const setFavOnlineOnly = useStore((s) => s.setFavOnlineOnly)
+  const setOnlineListFav = useStore((s) => s.setOnlineListFav)
+  // Remember whether the reader's left online list should show favorites: it
+  // mirrors the view the user opened a work from (favorites vs plain browse).
+  useEffect(() => setOnlineListFav(favMode), [favMode, setOnlineListFav])
+  const base = favMode
+    ? favOnlineOnly
+      ? gallery.filter((g) => onlineFavs[g.code]?.favorite)
+      : gallery
+    : items
+  const favLastPage = Math.max(0, Math.ceil(base.length / pageSize) - 1)
+  useEffect(() => setFavPage(0), [favMode, favSort, favSelected, base.length])
+  const ordered = reverse ? [...base].reverse() : base
+  const shown = favMode ? ordered.slice(favPage * pageSize, favPage * pageSize + pageSize) : ordered
 
   // Direct download from a card (feature 10). Progress shows in the shared
   // download manager (fed by the hitomiProgress channel).
@@ -364,7 +424,7 @@ export default function Browse(): JSX.Element {
                 }}
                 title="즐겨찾기"
               >
-                <FavoriteIcon filled className="fav-ico" /> 즐겨찾기
+                <FavoriteIcon filled className="fav-ico" /> 즐겨찾기 {favGalleries.length}
               </span>
               <span className="fav-caret" onClick={() => setFavPanel((v) => !v)} title="즐겨찾기 목록">
                 <span className={`dt ${favPanel ? 'up' : ''}`} />
@@ -391,6 +451,15 @@ export default function Browse(): JSX.Element {
               </div>
             )}
           </div>
+          {favMode && (
+            <FavDlToggle
+              checked={favOnlineOnly}
+              onChange={setFavOnlineOnly}
+              icon={<LanguageIcon />}
+              onTitle="온라인 즐겨찾기만 보는 중"
+              offTitle="모든 즐겨찾기 보는 중"
+            />
+          )}
           {favMode && (
             <Dropdown<'rank' | 'recent'>
               className="field sm"
@@ -472,7 +541,7 @@ export default function Browse(): JSX.Element {
               })
             }}
           >
-            <OnlineThumb getImgs={() => getOnlineImages(g.code)} thumbUrl={g.thumbUrl}>
+            <OnlineThumb getImgs={() => getOnlineImages(g.code)} thumbUrl={g.thumbUrl} localWorkId={codeWorkId.get(g.code)}>
               {(dlActive || dlPaused || have) && (
                 <div className="gcard-dlbar">
                   <div
@@ -486,11 +555,11 @@ export default function Browse(): JSX.Element {
               <Stars rank={f?.rank ?? 0} onChange={(r) => setOnlineRank(g.code, r, favMeta(g))} size={15} />
               <span className="seg" style={{ marginLeft: 'auto' }} onClick={(e) => e.stopPropagation()}>
                 <span
-                  className={`seg-heart ${f?.favorite ? 'on' : ''}`}
+                  className={`seg-heart ${f?.favorite || localFavCodes.has(g.code) ? 'on' : ''}`}
                   title="즐겨찾기"
-                  onClick={() => toggleOnlineFav(g.code, favMeta(g))}
+                  onClick={() => toggleUnifiedFav(g.code, favMeta(g))}
                 >
-                  <FavoriteIcon filled={!!f?.favorite} />
+                  <FavoriteIcon filled={!!f?.favorite || localFavCodes.has(g.code)} />
                 </span>
                 <span
                   className={`seg-dl ${have ? 'ok' : ''} ${dlErr ? 'err' : ''} ${dlPaused ? 'paused' : ''}`}
@@ -555,6 +624,7 @@ export default function Browse(): JSX.Element {
                 onTagClick={(t) => addToken(tagToken(t))}
                 onTagContext={(t, e) => setCrossMenu({ x: e.clientX, y: e.clientY, query: tagToken(t), raw: t })}
                 singleLine={browseLayout === 'list'}
+                lines={browseLayout === 'grid' ? 5 : undefined}
                 max={6}
               />
             </div>

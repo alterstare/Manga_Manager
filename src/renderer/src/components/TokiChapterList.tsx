@@ -5,7 +5,7 @@ import { getTokiChapters } from '../toki'
 import type { TokiChapter } from '../../../shared/ipc'
 import type { OnlineFav } from '../../../shared/types'
 import Stars from './Stars'
-import { SearchIcon, FavoriteIcon, WidthNormalIcon } from './icons'
+import { SearchIcon, FavoriteIcon, AutoStoriesIcon } from './icons'
 
 // Left list shown while reading a toki chapter: the sibling chapters of the active
 // tab's series. Mirrors the local general-manga left list (LibraryList) so the
@@ -64,7 +64,7 @@ export default function TokiChapterList(): JSX.Element {
           ← 홈
         </button>
         <span className="lib-series-label">
-          <WidthNormalIcon /> 시리즈 · {chapters.length}화
+          <AutoStoriesIcon /> 시리즈 · {chapters.length}화
         </span>
       </div>
       <div className="lib-search-row">

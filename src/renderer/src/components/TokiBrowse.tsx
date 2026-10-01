@@ -10,7 +10,10 @@ import type { TokiSeriesRef } from './TokiDownloadModal'
 import TokiBackupModal from './TokiBackupModal'
 import OnlineThumb from './OnlineThumb'
 import { getOnlineImages } from '../images'
-import { SearchIcon, FavoriteIcon, DownloadIcon } from './icons'
+import { SearchIcon, FavoriteIcon, DownloadIcon, LanguageIcon } from './icons'
+import FavDlToggle from './FavDlToggle'
+import Pager from './Pager'
+import { groupSeries, titleKey } from '../util'
 
 const SORTS: [TokiSort, string][] = [
   ['date', '최신순'],
@@ -39,7 +42,14 @@ export default function TokiBrowse(): JSX.Element {
   const openTokiBackground = useStore((s) => s.openTokiBackground)
   const openGlance = useStore((s) => s.openGlance)
   const onlineFavs = useStore((s) => s.onlineFavs)
-  const toggleOnlineFav = useStore((s) => s.toggleOnlineFav)
+  const toggleNormalUnifiedFav = useStore((s) => s.toggleNormalUnifiedFav)
+  const favOnlineOnly = useStore((s) => s.favOnlineOnly)
+  const setFavOnlineOnly = useStore((s) => s.setFavOnlineOnly)
+  const works = useStore((s) => s.works)
+  const openTab = useStore((s) => s.openTab)
+  const normalRootsSetting = useStore((s) => s.settings.normalRoots)
+  const normalFavDir = useStore((s) => s.settings.normalFavoritesDir)
+  const normalFavSeries = useStore((s) => s.settings.normalFavSeries)
   const setOnlineRank = useStore((s) => s.setOnlineRank)
   const authorSeed = useStore((s) => s.tokiAuthorSeed)
   const browseTopNonce = useStore((s) => s.browseTopNonce)
@@ -71,13 +81,20 @@ export default function TokiBrowse(): JSX.Element {
   const [dlSeries, setDlSeries] = useState<TokiSeriesRef | null>(null)
   const [backupOpen, setBackupOpen] = useState(false)
   const [favMode, setFavMode] = useState(false)
-  const [favSort, setFavSort] = useState<'rank' | 'recent'>('rank')
+  const [favSort, setFavSort] = useState<'rank' | 'recent'>('recent')
 
   // The browse view is kept mounted (hidden) once first opened, so this effect
   // only re-runs on an actual source/page/base change or a forced reload
   // (🌐 double-press / reloadKey) — returning to the view does NOT refetch.
+  // Set when a typed jump overshoots the last page: the site lands on its last
+  // page, we sync `page` to it — that state change must not refetch.
+  const skipFetch = useRef(false)
   useEffect(() => {
     if (favMode) return
+    if (skipFetch.current) {
+      skipFetch.current = false
+      return
+    }
     let alive = true
     setLoading(true)
     setError(null)
@@ -88,6 +105,10 @@ export default function TokiBrowse(): JSX.Element {
         if (!alive) return
         setItems(r.items)
         setHasNext(r.hasNext)
+        if (r.page !== page) {
+          skipFetch.current = true
+          setPage(r.page)
+        }
         // Use the genre chips the live page actually offers (per type).
         if (r.genres && r.genres.length) setGenres(['전체', ...r.genres.filter((g) => g !== '전체')])
       })
@@ -161,27 +182,67 @@ export default function TokiBrowse(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authorSeed?.nonce])
 
-  // Favorited toki series (url codes), rendered as cards like the live list.
+  // Local general-manga series (downloaded), keyed by normalized title — links a
+  // local series with its online toki counterpart (they share only the title).
+  const localSeries = useMemo(() => {
+    const roots = [...(normalRootsSetting ?? []), normalFavDir].filter(Boolean) as string[]
+    const m = new Map<string, { key: string; title: string; repId: string; artist: string | null }>()
+    for (const g of groupSeries(works.filter((w) => (w.library ?? 'hitomi') === 'normal'), roots)) {
+      const k = titleKey(g.title)
+      if (k && !m.has(k))
+        m.set(k, { key: g.key, title: g.title, repId: g.chapters[0]?.id ?? '', artist: g.chapters.find((c) => c.artist)?.artist ?? null })
+    }
+    return m
+  }, [works, normalRootsSetting, normalFavDir])
+  // Title keys favorited locally (series hearts in the library).
+  const localFavKeys = useMemo(() => {
+    const set = new Set<string>()
+    for (const [k, v] of localSeries) if ((normalFavSeries ?? []).includes(v.key)) set.add(k)
+    return set
+  }, [localSeries, normalFavSeries])
+  const isFavTitle = (g: TokiSummary): boolean =>
+    !!onlineFavs[g.url]?.favorite || localFavKeys.has(titleKey(g.title))
+
+  // Unified favorites: online toki favorites + locally-favorited series that have
+  // no online favorite yet (url `local:<key>` → opens the downloaded series).
+  const normalFavAt = useStore((s) => s.settings.normalFavAt)
   const favGalleries = useMemo<TokiSummary[]>(() => {
-    const arr = Object.values(onlineFavs).filter((f) => f.favorite && /^https?:/.test(f.code))
-    arr.sort((a, b) =>
-      favSort === 'rank' ? b.rank - a.rank || b.addedAt - a.addedAt : b.addedAt - a.addedAt
-    )
-    return arr.map((f) => ({
-      url: f.code,
-      title: f.title,
-      thumb: f.thumbUrl,
-      artist: f.artist,
-      genre: null,
-      chapter: null
-    }))
-  }, [onlineFavs, favSort])
-  const gallery = favMode ? favGalleries : items
+    const rows: { g: TokiSummary; t: number; r: number }[] = []
+    const seen = new Set<string>()
+    for (const f of Object.values(onlineFavs)) {
+      if (!f.favorite || !/^https?:/.test(f.code)) continue
+      seen.add(titleKey(f.title))
+      rows.push({ g: { url: f.code, title: f.title, thumb: f.thumbUrl, artist: f.artist, genre: null, chapter: null }, t: f.addedAt, r: f.rank })
+    }
+    for (const k of localFavKeys) {
+      if (seen.has(k)) continue
+      const v = localSeries.get(k)
+      if (v)
+        rows.push({
+          g: { url: `local:${v.key}`, title: v.title, thumb: null, artist: v.artist, genre: null, chapter: null },
+          t: normalFavAt?.[v.key] ?? 0,
+          r: 0
+        })
+    }
+    rows.sort((x, y) => (favSort === 'rank' ? y.r - x.r || y.t - x.t : y.t - x.t))
+    return rows.map((x) => x.g)
+  }, [onlineFavs, favSort, localFavKeys, localSeries, normalFavAt])
+  // "온라인만" toggle hides the local-only entries.
+  const gallery = favMode
+    ? favOnlineOnly
+      ? favGalleries.filter((g) => !g.url.startsWith('local:'))
+      : favGalleries
+    : items
 
   const openSeries = async (
     g: TokiSummary,
     target: 'tab' | 'glance' | 'background' = 'tab'
   ): Promise<void> => {
+    if (g.url.startsWith('local:')) {
+      const v = localSeries.get(titleKey(g.title))
+      if (v?.repId) openTab(v.repId)
+      return
+    }
     setOpening(g.url)
     try {
       const chapters = await window.api.tokiChapters(g.url)
@@ -274,8 +335,17 @@ export default function TokiBrowse(): JSX.Element {
             title="즐겨찾기"
             onClick={() => setFavMode((v) => !v)}
           >
-            <FavoriteIcon filled className="fav-ico" /> 즐겨찾기
+            <FavoriteIcon filled className="fav-ico" /> 즐겨찾기 {favGalleries.length}
           </button>
+          {favMode && (
+            <FavDlToggle
+              checked={favOnlineOnly}
+              onChange={setFavOnlineOnly}
+              icon={<LanguageIcon />}
+              onTitle="온라인 즐겨찾기만 보는 중"
+              offTitle="모든 즐겨찾기 보는 중"
+            />
+          )}
           {favMode && (
             <Dropdown<'rank' | 'recent'>
               className="field sm"
@@ -388,6 +458,7 @@ export default function TokiBrowse(): JSX.Element {
               >
                 <OnlineThumb
                   thumbUrl={g.thumb}
+                  localWorkId={localSeries.get(titleKey(g.title))?.repId || undefined}
                   getImgs={async () => {
                     // toki: series URL → first chapter → its images.
                     const ch = await window.api.tokiChapters(g.url)
@@ -400,14 +471,18 @@ export default function TokiBrowse(): JSX.Element {
               <div className="gcard-foot">
                 <Stars rank={f?.rank ?? 0} onChange={(r) => setOnlineRank(g.url, r, favMeta(g, artist))} size={15} />
                 <span
-                  className={`gcard-heart ${f?.favorite ? 'on' : ''}`}
+                  className={`gcard-heart ${isFavTitle(g) ? 'on' : ''}`}
                   title="즐겨찾기"
                   onClick={(e) => {
                     e.stopPropagation()
-                    toggleOnlineFav(g.url, favMeta(g, artist))
+                    void toggleNormalUnifiedFav({
+                      title: g.title,
+                      url: g.url.startsWith('local:') ? undefined : g.url,
+                      meta: favMeta(g, artist)
+                    })
                   }}
                 >
-                  <FavoriteIcon filled={!!f?.favorite} />
+                  <FavoriteIcon filled={isFavTitle(g)} />
                 </span>
               </div>
               <div
@@ -448,15 +523,9 @@ export default function TokiBrowse(): JSX.Element {
       </div>
 
       {!favMode && (
-        <div className="pager">
-          <button className="btn" disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}>
-            ‹ 이전
-          </button>
-          <span className="pager-cur">{page + 1}</span>
-          <button className="btn" disabled={!hasNext} onClick={() => setPage((p) => p + 1)}>
-            다음 ›
-          </button>
-        </div>
+        // Total page count isn't exposed by the site → no "/ N"; type any page
+        // and Enter (overshooting lands on the last page).
+        <Pager page={page} lastPage={-1} hasNext={hasNext} onPage={(p) => setPage(Math.max(0, p))} />
       )}
 
       {dlSeries && <TokiDownloadModal series={dlSeries} onClose={() => setDlSeries(null)} />}

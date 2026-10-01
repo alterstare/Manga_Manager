@@ -122,6 +122,35 @@ function thumbFile(workId: string): string {
   return join(thumbDir, `${workId.replace(/[^A-Za-z0-9._-]/g, '_')}.v2.webp`)
 }
 
+// Is this thumb file a raw, full-size cover (online cover regen writes the source
+// image as-is: AVIF/JPEG up to ~3000px) rather than our ≤480px webp? Header-only
+// check. Raw thumbs make every scroll re-decode megapixel images → stutter.
+async function isRawThumb(file: string): Promise<boolean> {
+  const fh = await fs.open(file, 'r')
+  try {
+    const b = Buffer.alloc(30)
+    await fh.read(b, 0, 30, 0)
+    if (b.toString('latin1', 8, 12) !== 'WEBP') return true
+    const chunk = b.toString('latin1', 12, 16)
+    let w = 0
+    let h = 0
+    if (chunk === 'VP8X') {
+      w = 1 + b.readUIntLE(24, 3)
+      h = 1 + b.readUIntLE(27, 3)
+    } else if (chunk === 'VP8 ') {
+      w = b.readUInt16LE(26) & 0x3fff
+      h = b.readUInt16LE(28) & 0x3fff
+    } else if (chunk === 'VP8L') {
+      const v = b.readUInt32LE(21)
+      w = (v & 0x3fff) + 1
+      h = ((v >> 14) & 0x3fff) + 1
+    }
+    return Math.max(w, h) > 640
+  } finally {
+    await fh.close()
+  }
+}
+
 // Wrap a remote hitomi image url so the renderer can load it through our
 // protocol (main attaches the required Referer; bare <img> would get a 403).
 function encodeWeb(url: string): string {
@@ -593,17 +622,19 @@ function registerIpc(): void {
     if (!w) throw new Error('no work')
     // General-manga (normal) favorites are managed in-app (see setNormalFav); they
     // never move folders. Only hitomi favorites use the folder-move favorites dir.
-    if ((w.library ?? 'hitomi') === 'normal') return store.update(workId, { favorite: fav })
+    // Stamp when it was favorited (drives the unified favorites "recent" order).
+    const stamp = { favoritedAt: fav ? Date.now() : undefined }
+    if ((w.library ?? 'hitomi') === 'normal') return store.update(workId, { favorite: fav, ...stamp })
     const favDir = store.settings.favoritesDir
     if (fav && favDir) {
       const patch = await moveToFavorites(w, favDir, store.settings.groups)
-      return store.update(workId, patch)
+      return store.update(workId, { ...patch, ...stamp })
     }
     if (!fav && w.homePath) {
       const patch = await moveFromFavorites(w)
-      return store.update(workId, patch)
+      return store.update(workId, { ...patch, ...stamp })
     }
-    return store.update(workId, { favorite: fav })
+    return store.update(workId, { favorite: fav, ...stamp })
   })
 
   // General-manga in-app favorites: toggle a series (by key) or a single chapter
@@ -612,7 +643,10 @@ function registerIpc(): void {
     const field = kind === 'series' ? 'normalFavSeries' : 'normalFavChapters'
     const cur = store.settings[field] ?? []
     const next = fav ? [...new Set([...cur, key])] : cur.filter((x) => x !== key)
-    return store.saveSettings({ ...store.settings, [field]: next })
+    const at = { ...(store.settings.normalFavAt ?? {}) }
+    if (fav) at[key] = at[key] ?? Date.now()
+    else delete at[key]
+    return store.saveSettings({ ...store.settings, [field]: next, normalFavAt: at })
   })
 
   ipcMain.handle(IPC.setRank, (_e, workId: string, rank: number) =>
@@ -1521,7 +1555,9 @@ function registerIpc(): void {
       // Version the url by file mtime so a regenerated cover (same path) busts
       // the renderer's image cache. The protocol handler ignores the query.
       const st = await fs.stat(file)
-      return encodeImg(file) + '?v=' + Math.floor(st.mtimeMs)
+      // "#raw" (never sent to the protocol handler) → renderer shrinks it once.
+      const raw = await isRawThumb(file).catch(() => false)
+      return encodeImg(file) + '?v=' + Math.floor(st.mtimeMs) + (raw ? '#raw' : '')
     } catch {
       return null
     }

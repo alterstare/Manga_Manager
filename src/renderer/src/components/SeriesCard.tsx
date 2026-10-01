@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
 import type { JSX, MouseEvent } from 'react'
 import type { SeriesGroup, ChapterInfo } from '../util'
-import { analyzeSeries, CHAP_FAV_PREFIX, tagToken } from '../util'
+import { analyzeSeries, CHAP_FAV_PREFIX, tagToken, titleKey } from '../util'
 import { useStore } from '../store'
 import Thumb from './Thumb'
+import { ArtistLinks } from './ArtistLinks'
 import Stars from './Stars'
 import FavGroup from './FavGroup'
 import TagList from './TagList'
@@ -23,6 +24,7 @@ const NO_TAGS: string[] = []
 // series tags are separate from each chapter's. "화 목록" lists chapters with
 // their own label + subtitle + tags.
 export default function SeriesCard({ series }: { series: SeriesGroup }): JSX.Element {
+  const addSearchToken = useStore((s) => s.addSearchToken)
   const openTab = useStore((s) => s.openTab)
   const openTabBackground = useStore((s) => s.openTabBackground)
   const openGlance = useStore((s) => s.openGlance)
@@ -39,6 +41,12 @@ export default function SeriesCard({ series }: { series: SeriesGroup }): JSX.Ele
   const setSeriesTags = useStore((s) => s.setSeriesTags)
   const toggleNormalFav = useStore((s) => s.toggleNormalFav)
   const favSeries = useStore((s) => s.settings.normalFavSeries)
+  const toggleNormalUnifiedFav = useStore((s) => s.toggleNormalUnifiedFav)
+  // Same series favorited online (toki) → counts as favorited here too.
+  const onlineTitleFav = useStore((s) => {
+    const k = titleKey(series.title)
+    return !!k && Object.values(s.onlineFavs).some((f) => f.favorite && /^https?:/.test(f.code) && titleKey(f.title) === k)
+  })
   const favChapters = useStore((s) => s.settings.normalFavChapters)
   const [open, setOpen] = useState(false)
   const [adding, setAdding] = useState(false)
@@ -58,7 +66,7 @@ export default function SeriesCard({ series }: { series: SeriesGroup }): JSX.Ele
   const isChapterEntry = series.key.startsWith(CHAP_FAV_PREFIX)
   const isFav = isChapterEntry
     ? (favChapters ?? []).includes(rep?.id ?? '')
-    : (favSeries ?? []).includes(series.key)
+    : (favSeries ?? []).includes(series.key) || onlineTitleFav
   const maxRank = Math.max(0, ...chapters.map((c) => c.rank))
   const artist = chapters.find((c) => c.artist)?.artist ?? null
   const language = chapters.find((c) => c.language)?.language ?? null
@@ -68,7 +76,7 @@ export default function SeriesCard({ series }: { series: SeriesGroup }): JSX.Ele
     if (isChapterEntry) {
       if (rep) await toggleNormalFav('chapter', rep.id, !isFav)
     } else {
-      await toggleNormalFav('series', series.key, !isFav)
+      await toggleNormalUnifiedFav({ title: series.title, localKey: series.key })
     }
   }
   const rankAll = async (r: number): Promise<void> => {
@@ -166,22 +174,21 @@ export default function SeriesCard({ series }: { series: SeriesGroup }): JSX.Ele
 
           <div className="work-meta">
             <span>전체 {chapters.length}화</span>
+            {language && ' · '}
             {language && (
               <span className="lang removable">
                 {language}
                 <span className="tag-x" onClick={(e) => { e.stopPropagation(); clearField('language') }}>×</span>
               </span>
             )}
+            {artist && ' · '}
             {artist && (
-              <span
-                className="artist-link removable"
-                onContextMenu={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  setCrossMenu({ x: e.clientX, y: e.clientY, query: tagToken(`artist:${artist}`), raw: artist })
-                }}
-              >
-                {artist}
+              <span className="removable">
+                <ArtistLinks
+                  artist={artist}
+                  onPick={(a) => addSearchToken(tagToken(`artist:${a}`))}
+                  onMenu={(a, e) => setCrossMenu({ x: e.clientX, y: e.clientY, query: tagToken(`artist:${a}`), raw: a })}
+                />
                 <span className="tag-x" onClick={(e) => { e.stopPropagation(); clearField('artist') }}>×</span>
               </span>
             )}

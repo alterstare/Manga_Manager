@@ -81,6 +81,7 @@ function getWindow(): BrowserWindow {
     }
   })
   win.webContents.setUserAgent(UA)
+  blockHiddenMedia()
   // Don't actually destroy on user close — just hide, so the session survives.
   win.on('close', (e) => {
     e.preventDefault()
@@ -100,6 +101,27 @@ function getWindow(): BrowserWindow {
     win = null
   })
   return win
+}
+
+// The hidden scraper only reads DOM attributes (card links, data-src urls) — it
+// never needs the pixels. Skip images/media/fonts it would load (covers, ads,
+// banners): on a slow connection those dominated page-load time. Only for the
+// scraper window while HIDDEN — when shown (Cloudflare check, backup site) the
+// page loads normally. Cover/page fetches via session.fetch carry no
+// webContentsId, so they're unaffected.
+let mediaBlockOn = false
+function blockHiddenMedia(): void {
+  if (mediaBlockOn) return
+  mediaBlockOn = true
+  session.fromPartition(PARTITION).webRequest.onBeforeRequest((d, cb) => {
+    const w = win && !win.isDestroyed() ? win : null
+    const block =
+      !!w &&
+      !w.isVisible() &&
+      d.webContentsId === w.webContents.id &&
+      (d.resourceType === 'image' || d.resourceType === 'media' || d.resourceType === 'font')
+    cb({ cancel: block })
+  })
 }
 
 // True once the user has a Cloudflare clearance cookie for the toki domain.
@@ -165,19 +187,54 @@ const probe = async (w: BrowserWindow): Promise<Probe | null> => {
 // reload — reloading re-arms the managed challenge and makes the bot window pop
 // over and over when several scrape calls queue up. The cf_clearance cookie
 // covers the whole domain, so once solved, later same-host loads pass silently.
+// Only ERR_CONNECTION_RESET is retried: some networks reset the connection
+// intermittently (in a browser you'd just hit refresh a few times). Other
+// failures fail fast as before.
+const RETRY_CODES = new Set([-101])
+const MAX_RETRIES = 10
+const retryDelay = (n: number): number => Math.min(400 * n, 2000)
+
 async function ensure(url: string, needContent: boolean): Promise<void> {
   const w = getWindow()
   if (sameUrl(w.webContents.getURL(), url)) {
     const p = await probe(w)
     if (p && !p.challenge && (p.ready || !needContent)) return // already good — no reload
   }
-  // client redirects reject loadURL → ignore; a stuck navigation (challenge JS,
-  // long-poll) must not block the shared queue, so cap the wait.
-  await withTimeout(w.loadURL(url).then(() => undefined), 45000, undefined)
+  // Don't wait for the full load (every ad/script/subresource — slow links made
+  // this take many seconds): start probing as soon as the new document's DOM is
+  // ready. Client redirects reject loadURL → ignore; the 45s cap keeps a stuck
+  // navigation from blocking the shared queue.
+  let failCode = 0
+  const onFail = (_e: unknown, code: number, _d: string, _u: string, isMain: boolean): void => {
+    if (isMain && RETRY_CODES.has(code)) failCode = code
+  }
+  w.webContents.on('did-fail-load', onFail)
+  let nav: Promise<undefined> = Promise.resolve(undefined)
+  const load = async (): Promise<void> => {
+    failCode = 0
+    const domReady = new Promise<void>((r) => w.webContents.once('dom-ready', () => r()))
+    nav = withTimeout(w.loadURL(url).then(() => undefined), 45000, undefined)
+    await Promise.race([domReady, nav])
+  }
+  // Initial load, re-tried while the connection itself fails.
+  let retries = 0
+  await load()
+  while (failCode && retries < MAX_RETRIES) {
+    retries++
+    await delay(retryDelay(retries))
+    await load()
+  }
   let shown = false
   const start = Date.now()
-  for (;;) {
-    await delay(900)
+  for (let first = true; ; first = false) {
+    if (!first) await delay(300)
+    // Connection reset after DOM-ready (late failure) → reload.
+    if (failCode && retries < MAX_RETRIES) {
+      retries++
+      await delay(retryDelay(retries))
+      await load()
+      continue
+    }
     const p = await probe(w)
     if (!p) {
       if (Date.now() - start > 8000 && !needContent) break
@@ -195,11 +252,15 @@ async function ensure(url: string, needContent: boolean): Promise<void> {
       if (Date.now() - start > 180000) break // give up after 3 min
       continue
     }
-    if (p.ready || !needContent) break
+    if (p.ready) break
+    // No content selector needed → done once the page has fully loaded.
+    if (!needContent && (await Promise.race([nav.then(() => true), delay(0).then(() => false)]))) break
+    if (!needContent && Date.now() - start > 8000) break
     if (Date.now() - start > 30000) break // content never matched selectors → scrape anyway
   }
   // Only hide if we popped it open for a challenge AND it's now resolved, so the
   // user isn't left staring at a blank window — but don't thrash on every call.
+  w.webContents.removeListener('did-fail-load', onFail)
   if (shown && win && !win.isDestroyed() && (await hasClearance())) win.hide()
   if (shown) onChallenge?.(false) // clear the banner (solved, or gave up)
 }
@@ -211,15 +272,36 @@ async function evalPage<T>(script: string, fallback: T): Promise<T> {
   return withTimeout(w.webContents.executeJavaScript(script, true) as Promise<T>, 30000, fallback)
 }
 
-function listUrl(base: string, src: TokiListSource): string {
+// Sort tab → the site's `sort` query value (verified 2026-10; 최신순 = none).
+const SORT_PARAM: Record<TokiSort, string> = {
+  date: '',
+  new: 'fresh',
+  bookmark: 'hot',
+  view: 'views',
+  rating: 'rating',
+  chapter: 'episodes'
+}
+
+// The list now mirrors its state in the URL (?g=<genre>&sort=<key>&page=<n>,
+// search: &page=<n>), so open the exact page directly instead of loading page 1
+// and clicking through genre/sort/pager (that took seconds per call and forced
+// a reload whenever the previous click had changed the URL). 1-based `page`.
+function listUrl(base: string, src: TokiListSource, page: number): string {
   const b = base.replace(/\/+$/, '')
+  const u = new URL(
+    src.query && src.query.trim() ? `${b}/search` : src.type === 'webtoon' ? `${b}/ing` : `${b}/manhwa`
+  )
   if (src.query && src.query.trim()) {
-    const q = encodeURIComponent(src.query.trim())
+    u.searchParams.set('q', src.query.trim())
     // Author search matches the site's author links (exact); title = contains.
-    if (src.field === 'author') return `${b}/search?q=${q}&field=author&match=exact`
-    return `${b}/search?q=${q}&field=title&match=contains`
+    u.searchParams.set('field', src.field === 'author' ? 'author' : 'title')
+    u.searchParams.set('match', src.field === 'author' ? 'exact' : 'contains')
+  } else {
+    if (src.genre && src.genre !== '전체') u.searchParams.set('g', src.genre)
+    if (SORT_PARAM[src.sort]) u.searchParams.set('sort', SORT_PARAM[src.sort])
   }
-  return src.type === 'webtoon' ? `${b}/ing` : `${b}/manhwa`
+  if (page > 1) u.searchParams.set('page', String(page))
+  return u.href
 }
 
 // In-page: apply genre + sort + page (client-side React buttons), then scrape
@@ -232,30 +314,58 @@ function listScript(genre: string, sortLabel: string, page: number): string {
   const abs = (u) => { try { return new URL(u, location.href).href } catch { return u } }
   const txt = (el) => (el ? el.textContent : '').replace(/\\s+/g, ' ').trim()
   const chipText = (c) => { const f = c.querySelector('.chip-name-full'); return f ? txt(f) : txt(c) }
+  // Wait until the card list re-renders (first card href changes), max ~2.5s,
+  // instead of a fixed sleep after every click.
+  const cardsSig = () => [...document.querySelectorAll('a.card')].slice(0, 3).map((a) => a.getAttribute('href')).join('|')
+  const afterClick = async (before) => {
+    for (let i = 0; i < 25; i++) { await sleep(100); if (cardsSig() !== before) { await sleep(150); return } }
+  }
   // genre
   if (${G} && ${G} !== '전체') {
     const chips = [...document.querySelectorAll('.filter .chips button.chip, .chips button.chip')]
     const g = chips.find((c) => chipText(c) === ${G} || (c.title || '').includes(${G}))
-    if (g && !g.classList.contains('active')) { g.click(); await sleep(800) }
+    if (g && !g.classList.contains('active')) { const b = cardsSig(); g.click(); await afterClick(b) }
   }
   // sort
   if (${S}) {
     const tabs = [...document.querySelectorAll('.sort-tabs button')]
     const s = tabs.find((b) => txt(b).includes(${S}))
-    if (s && !s.classList.contains('active')) { s.click(); await sleep(800) }
+    if (s && !s.classList.contains('active')) { const b = cardsSig(); s.click(); await afterClick(b) }
   }
-  // page: click number directly if visible, else step the next-edge button
+  // page: the pager shows a 10-number window (desktop; mobile = 5) plus
+  // "이전/다음 10페이지" buttons. Click the number when visible, else shift the
+  // window toward it. Only the DESKTOP pager is used — the old code took the last
+  // .pager-btn in the document, which is the mobile "끝" edge → jumped to the
+  // last page, so nothing past page 10 was reachable.
   const target = ${page}
-  for (let guard = 0; guard < 80; guard++) {
-    const active = document.querySelector('.pager-num.is-active')
-    const cur = active ? parseInt(txt(active)) || 1 : 1
-    if (cur === target) break
-    const direct = [...document.querySelectorAll('.pager-num')].find((b) => parseInt(txt(b)) === target)
-    if (direct) { direct.click(); await sleep(800); break }
-    const edges = [...document.querySelectorAll('.pager-window--desktop .pager-btn, .pager .pager-btn')]
-    const next = edges[edges.length - 1]
-    if (!next || next.disabled) break
-    next.click(); await sleep(800)
+  const pager = () => document.querySelector('.pager-window--desktop') || document.querySelector('.pager')
+  const curPage = () => { const a = pager() && pager().querySelector('.pager-num.is-active'); return a ? parseInt(txt(a)) || 1 : 1 }
+  const nums = () => [...((pager() && pager().querySelectorAll('.pager-num')) || [])].map((b) => parseInt(txt(b))).filter((n) => !isNaN(n))
+  const sig = () => curPage() + ':' + nums().join(',')
+  // Wait for the React pager to re-render (active page or window changed).
+  const settle = async (before) => {
+    for (let i = 0; i < 50; i++) { await sleep(150); if (sig() !== before) { await sleep(350); return true } }
+    return false
+  }
+  for (let guard = 0; guard < 200; guard++) {
+    if (curPage() === target) break
+    const p = pager(); if (!p) break
+    const before = sig()
+    const direct = [...p.querySelectorAll('.pager-num')].find((b) => parseInt(txt(b)) === target)
+    if (direct) { direct.click(); await settle(before); continue }
+    const ns = nums()
+    const fwd = !ns.length || target > Math.max(...ns)
+    const btn = p.querySelector(fwd ? '.pager-btn[aria-label^="다음"]' : '.pager-btn[aria-label^="이전"]')
+    if (!btn || btn.disabled) {
+      // Past the end → land on the last visible page instead of stopping mid-window.
+      if (fwd && ns.length && curPage() !== Math.max(...ns)) {
+        const lastBtn = [...p.querySelectorAll('.pager-num')].find((b) => parseInt(txt(b)) === Math.max(...ns))
+        if (lastBtn) { lastBtn.click(); await settle(before) }
+      }
+      break
+    }
+    btn.click()
+    if (!(await settle(before))) break
   }
   // scrape
   const out = []
@@ -287,12 +397,13 @@ function listScript(genre: string, sortLabel: string, page: number): string {
     seen.add(url); out.push({ url, title, thumb, artist: null, genre, chapter })
   }
   const genres = [...document.querySelectorAll('.filter .chips button.chip')].map(chipText).filter(Boolean)
-  const nums = [...document.querySelectorAll('.pager-num')].map((b) => parseInt(txt(b))).filter((n) => !isNaN(n))
-  const maxNum = nums.length ? Math.max(...nums) : 1
-  const active = document.querySelector('.pager-num.is-active')
-  const cur = active ? parseInt(txt(active)) || 1 : 1
-  const hasNext = cur < maxNum
-  return { items: out, hasNext, genres }
+  const vis = nums()
+  const maxNum = vis.length ? Math.max(...vis) : 1
+  const cur = curPage()
+  // More pages beyond the visible window → the "다음 10페이지" button is enabled.
+  const nextWin = pager() && pager().querySelector('.pager-btn[aria-label^="다음"]')
+  const hasNext = cur < maxNum || (!!nextWin && !nextWin.disabled)
+  return { items: out, hasNext, genres, page: cur }
 })()`
 }
 
@@ -329,8 +440,13 @@ const CHAPTERS_SCRIPT = `(() => {
     if (!num && noEl) num = parseInt((noEl.textContent || '').replace(/[^0-9]/g, '')) || 0
     seen.add(url); out.push({ url, title, num })
   }
-  out.reverse() // site lists newest-first → ascending reading order
-  return out
+  // Episode list is paged (?epage=N, newest first). Report the last page so the
+  // caller can walk the rest; reversal to reading order happens after merging.
+  let last = 1
+  for (const l of document.querySelectorAll('.episode-pager a[href*="epage="], a.pager-num[href*="epage="], a.pager-edge[href*="epage="]')) {
+    try { const n = parseInt(new URL(abs(l.getAttribute('href'))).searchParams.get('epage') || '1'); if (n > last) last = n } catch {}
+  }
+  return { items: out, last }
 })()`
 
 // Chapter viewer → image urls. Verified (2026-07): page images are
@@ -378,21 +494,40 @@ const READ_SCRIPT = `(() => {
 
 export async function tokiList(base: string, src: TokiListSource, page: number): Promise<TokiListResult> {
   return queue(async () => {
-    await ensure(listUrl(base, src), true)
+    // URL already selects genre/sort/page; the in-page script then finds them
+    // active and does nothing (its clicking stays as a fallback).
+    await ensure(listUrl(base, src, page + 1), true)
     // On a search results page there are no genre/sort tabs to drive — passing
     // '전체'/'' skips those in-page clicks (which would otherwise no-op or churn).
-    const r = await evalPage<{ items: TokiListResult['items']; hasNext: boolean; genres: string[] }>(
+    const r = await evalPage<{ items: TokiListResult['items']; hasNext: boolean; genres: string[]; page?: number }>(
       listScript(src.query ? '전체' : src.genre, src.query ? '' : SORT_LABEL[src.sort], page + 1),
       { items: [], hasNext: false, genres: [] }
     )
-    return { items: r.items ?? [], page, hasNext: !!r.hasNext, genres: r.genres ?? [] }
+    // r.page = where the site actually landed (a jump past the end stops at the
+    // last page) → report it so the UI shows the real page.
+    const landed = r.page && r.page > 0 ? r.page - 1 : page
+    return { items: r.items ?? [], page: landed, hasNext: !!r.hasNext, genres: r.genres ?? [] }
   })
 }
 
 export async function tokiChapters(base: string, seriesUrl: string): Promise<TokiChapter[]> {
   return queue(async () => {
+    type R = { items: TokiChapter[]; last: number }
     await ensure(seriesUrl, true)
-    return evalPage<TokiChapter[]>(CHAPTERS_SCRIPT, [])
+    const first = await evalPage<R>(CHAPTERS_SCRIPT, { items: [], last: 1 })
+    const all = [...(first.items ?? [])]
+    const seen = new Set(all.map((c) => c.url))
+    // Walk every other episode page (?epage=2..last). Built from seriesUrl, not
+    // the scraped href, so a mirror-domain link can't send us elsewhere.
+    const last = Math.min(first.last || 1, 200)
+    for (let p = 2; p <= last; p++) {
+      const u = new URL(seriesUrl)
+      u.searchParams.set('epage', String(p))
+      await ensure(u.href, true)
+      const r = await evalPage<R>(CHAPTERS_SCRIPT, { items: [], last: 1 })
+      for (const c of r.items ?? []) if (!seen.has(c.url)) { seen.add(c.url); all.push(c) }
+    }
+    return all.reverse() // site lists newest-first → ascending reading order
   })
 }
 
@@ -511,9 +646,11 @@ export async function tokiOpenSite(base: string, url?: string): Promise<void> {
   return queue(async () => {
     const w = getWindow()
     const target = url && url.trim() ? url.trim() : base.replace(/\/+$/, '') + '/'
-    await w.loadURL(target).catch(() => {})
+    // Show first: the hidden-window media block must not strip the page the
+    // user is about to browse by hand.
     w.show()
     w.focus()
+    await w.loadURL(target).catch(() => {})
   })
 }
 
@@ -591,11 +728,22 @@ const GENERIC_READ_SCRIPT = `(() => {
 // Fetch an image through the persistent session with an explicit referer (the
 // backup sites 403 a bare <img> and need referer = their own domain).
 async function fetchImg(url: string, referer: string): Promise<Buffer> {
-  const res = await session.fromPartition(PARTITION).fetch(url, {
-    headers: { 'User-Agent': UA, Referer: referer }
-  })
-  if (!res.ok) throw new Error(`img ${res.status}`)
-  return Buffer.from(await res.arrayBuffer())
+  // Retry thrown network errors (connection resets); HTTP errors fail at once.
+  for (let attempt = 0; ; attempt++) {
+    let res: Response
+    try {
+      res = await session.fromPartition(PARTITION).fetch(url, {
+        headers: { 'User-Agent': UA, Referer: referer }
+      })
+    } catch (e) {
+      // Only connection resets are retried; anything else fails as before.
+      if (attempt >= 4 || !/ERR_CONNECTION_RESET/.test(String(e))) throw e
+      await delay(300 * (attempt + 1))
+      continue
+    }
+    if (!res.ok) throw new Error(`img ${res.status}`)
+    return Buffer.from(await res.arrayBuffer())
+  }
 }
 
 // Download a list of already-scraped chapters (from a backup site) to disk. Each
@@ -676,11 +824,23 @@ export async function tokiCoverForTitle(base: string, title: string): Promise<st
 // <img> would get a 403). Used by the mangaimg://toki protocol host.
 export async function fetchTokiBuffer(base: string, url: string): Promise<Buffer> {
   const ses = session.fromPartition(PARTITION)
-  const res = await ses.fetch(url, {
-    headers: { 'User-Agent': UA, Referer: base.replace(/\/+$/, '') + '/' }
-  })
-  if (!res.ok) throw new Error(`toki img ${res.status}`)
-  return Buffer.from(await res.arrayBuffer())
+  // Same intermittent connection resets hit image requests → retry network
+  // errors (thrown) a few times; HTTP errors (403/404) fail immediately.
+  for (let attempt = 0; ; attempt++) {
+    let res: Response
+    try {
+      res = await ses.fetch(url, {
+        headers: { 'User-Agent': UA, Referer: base.replace(/\/+$/, '') + '/' }
+      })
+    } catch (e) {
+      // Only connection resets are retried; anything else fails as before.
+      if (attempt >= 4 || !/ERR_CONNECTION_RESET/.test(String(e))) throw e
+      await delay(300 * (attempt + 1))
+      continue
+    }
+    if (!res.ok) throw new Error(`toki img ${res.status}`)
+    return Buffer.from(await res.arrayBuffer())
+  }
 }
 
 // --- download a whole series into the local general-manga library ---

@@ -3,16 +3,14 @@ import type { JSX } from 'react'
 import { useStore } from '../store'
 import type { TokiChapter, HitomiProgress } from '../../../shared/ipc'
 
-const DEFAULT_URL =
-  ''
-
 // Backup (gnuboard-style) site downloader. The site isn't scraped into our
 // browse UI — the user opens it as a plain web page, navigates to a chapter LIST
 // page, then we read that page's chapter list and download (in the background,
 // via the hidden window) to the general-manga folder.
 export default function TokiBackupModal({ onClose }: { onClose: () => void }): JSX.Element {
   const startDownload = useStore((s) => s.startDownload)
-  const [url, setUrl] = useState(DEFAULT_URL)
+  // No built-in address — the user enters the backup site themselves.
+  const [url, setUrl] = useState('')
   const [title, setTitle] = useState('')
   const [chapters, setChapters] = useState<TokiChapter[] | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -30,7 +28,13 @@ export default function TokiBackupModal({ onClose }: { onClose: () => void }): J
   }, [title])
 
   const openSite = (): void => {
-    window.api.tokiOpenSite(url.trim() || DEFAULT_URL)
+    const u = url.trim()
+    if (!u) {
+      setErr('백업 사이트 주소를 입력하세요.')
+      return
+    }
+    setErr(null)
+    window.api.tokiOpenSite(/^https?:\/\//i.test(u) ? u : `https://${u}`)
   }
 
   const loadList = async (): Promise<void> => {
@@ -112,7 +116,7 @@ export default function TokiBackupModal({ onClose }: { onClose: () => void }): J
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder="백업 사이트 주소"
               />
-              <button className="btn" onClick={openSite}>
+              <button className="btn" onClick={openSite} disabled={!url.trim()}>
                 사이트 열기
               </button>
             </div>

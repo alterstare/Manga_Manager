@@ -19,6 +19,7 @@ export interface Work {
   favorite: boolean
   homePath: string | null // original location, set when moved into favorites dir
   rank: number // 0 = unranked, 1-5
+  favoritedAt?: number // when it was last favorited (unified favorites "recent" order)
   viewCount: number
   lastViewedAt: number | null
   addedAt: number
@@ -221,6 +222,8 @@ export interface Settings {
   // a single-chapter favorite stores the work id (opens that chapter directly).
   normalFavSeries: string[]
   normalFavChapters: string[]
+  // When each general-manga favorite (series key / chapter work id) was added.
+  normalFavAt?: Record<string, number>
   // One-time flag: existing folder-moved normal favorites were un-favorited and
   // moved back to their origin when migrating to the in-app list system.
   normalFavMigrated: boolean
@@ -249,7 +252,6 @@ export const DEFAULT_HITOMI_PATTERNS = [
 // Settings whose value is tracked independently per library mode. Everything else
 // is shared. The active-mode overlay in Settings.perMode wins over the base value.
 export const SPLIT_SETTING_KEYS = [
-  'theme',
   'marginWidth',
   'pageSize',
   'thumbHoverPreview',

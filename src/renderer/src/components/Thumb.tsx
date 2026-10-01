@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { JSX } from 'react'
 import { createPortal } from 'react-dom'
-import { loadThumb, invalidateThumb } from '../thumbs'
+import { loadThumb, peekThumb, syncThumbNonce, onThumb } from '../thumbs'
 import { getImages } from '../images'
 import { useStore } from '../store'
 
@@ -10,8 +10,9 @@ import { useStore } from '../store'
 // pages through (down = next page, up = previous).
 export default function Thumb({ workId }: { workId: string }): JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
-  const [src, setSrc] = useState<string | null>(null)
-  const [visible, setVisible] = useState(false)
+  const [src, setSrc] = useState<string | null>(() => peekThumb(workId) ?? null)
+  // Cached cover → no need to wait for the viewport observer.
+  const [visible, setVisible] = useState(() => peekThumb(workId) !== undefined)
   // Bumped after an online cover regen → drop the cached thumb and reload.
   const nonce = useStore((s) => s.thumbNonce)
   const previewOn = useStore((s) => s.settings.thumbHoverPreview !== false)
@@ -25,7 +26,7 @@ export default function Thumb({ workId }: { workId: string }): JSX.Element {
 
   useEffect(() => {
     const el = ref.current
-    if (!el) return
+    if (!el || visible) return
     const io = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
@@ -42,10 +43,12 @@ export default function Thumb({ workId }: { workId: string }): JSX.Element {
   useEffect(() => {
     if (!visible) return
     let alive = true
-    if (nonce > 0) invalidateThumb(workId) // regen happened → refetch from disk
+    syncThumbNonce(nonce) // regen happened → refetch from disk (once per bump)
     loadThumb(workId).then((c) => alive && setSrc(c))
+    const off = onThumb(workId, (c) => alive && setSrc(c))
     return () => {
       alive = false
+      off()
     }
   }, [visible, workId, nonce])
 
@@ -87,7 +90,7 @@ export default function Thumb({ workId }: { workId: string }): JSX.Element {
     <div className="thumb" ref={ref} onMouseEnter={onEnter} onMouseLeave={onLeave}>
       {src ? <img src={src} loading="lazy" alt="" /> : <div className="thumb-ph" />}
       {preview && rect && imgs && imgs.length > 0 && (
-        <PreviewPortal rect={rect} src={imgs[idx]} page={idx + 1} total={imgs.length} />
+        <PreviewPortal rect={rect} src={imgs[idx]} page={idx + 1} total={imgs.length} onClose={onLeave} />
       )}
     </div>
   )
@@ -99,13 +102,34 @@ export function PreviewPortal({
   rect,
   src,
   page,
-  total
+  total,
+  onClose
 }: {
   rect: DOMRect
   src: string
   page: number
   total: number
+  onClose?: () => void
 }): JSX.Element {
+  // Safety net: dismiss the floating preview on any click / key / scroll / focus
+  // loss. Without this, clicking a card to open it (which switches the view so the
+  // thumb's mouseleave never fires) would strand the portal over the new screen
+  // with no way to close it.
+  useEffect(() => {
+    if (!onClose) return
+    const close = (): void => onClose()
+    window.addEventListener('mousedown', close, true)
+    window.addEventListener('keydown', close, true)
+    window.addEventListener('scroll', close, true)
+    window.addEventListener('blur', close)
+    return () => {
+      window.removeEventListener('mousedown', close, true)
+      window.removeEventListener('keydown', close, true)
+      window.removeEventListener('scroll', close, true)
+      window.removeEventListener('blur', close)
+    }
+  }, [onClose])
+
   const vw = window.innerWidth
   const vh = window.innerHeight
   const w = Math.min(560, Math.round(vw * 0.5))
