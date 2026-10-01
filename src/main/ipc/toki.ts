@@ -47,7 +47,7 @@ function runTokiDownload(seriesUrl: string, title: string, chapterUrls?: string[
   const destRoot = normalDestRoot()
   return runDownload(seriesUrl, title, async (signal, report) => {
     // Grab the author from the series page so downloaded chapters carry it.
-    const artist = await tokiSeriesAuthor(seriesUrl).catch(() => null)
+    const artist = await tokiSeriesAuthor(store.settings.tokiBaseUrl, seriesUrl).catch(() => null)
     const dir = await tokiDownloadSeries(
       store.settings.tokiBaseUrl,
       seriesUrl,
@@ -71,10 +71,10 @@ export function registerTokiIpc(): void {
     // Wrap card thumbs so they load through our protocol with the site referer.
     return { ...r, items: r.items.map((it) => ({ ...it, thumb: it.thumb ? encodeToki(it.thumb) : null })) }
   })
-  ipcMain.handle(IPC.tokiChapters, (_e, seriesUrl: string) => tokiChapters(seriesUrl))
-  ipcMain.handle(IPC.tokiReadUrls, async (_e, chapterUrl: string) => (await tokiReadUrls(chapterUrl)).map(encodeToki))
-  ipcMain.handle(IPC.tokiSeriesAuthor, (_e, seriesUrl: string) => tokiSeriesAuthor(seriesUrl))
-  ipcMain.handle(IPC.tokiSeriesTitle, (_e, seriesUrl: string) => tokiSeriesTitle(seriesUrl))
+  ipcMain.handle(IPC.tokiChapters, (_e, seriesUrl: string) => tokiChapters(store.settings.tokiBaseUrl, seriesUrl))
+  ipcMain.handle(IPC.tokiReadUrls, async (_e, chapterUrl: string) => (await tokiReadUrls(store.settings.tokiBaseUrl, chapterUrl)).map(encodeToki))
+  ipcMain.handle(IPC.tokiSeriesAuthor, (_e, seriesUrl: string) => tokiSeriesAuthor(store.settings.tokiBaseUrl, seriesUrl))
+  ipcMain.handle(IPC.tokiSeriesTitle, (_e, seriesUrl: string) => tokiSeriesTitle(store.settings.tokiBaseUrl, seriesUrl))
 
   // Show the scraper window (Cloudflare check / backup site browsing by hand).
   ipcMain.handle(IPC.tokiOpenSite, (_e, url?: string) => tokiOpenSite(store.settings.tokiBaseUrl, url))

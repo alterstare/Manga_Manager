@@ -1,6 +1,6 @@
 {
   "name": "manga-manager",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Local manga library manager with Chrome-like tabs and hitomi.la metadata",
   "main": "./out/main/index.js",
   "author": "noth2",
