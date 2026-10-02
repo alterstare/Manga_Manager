@@ -15,6 +15,7 @@ import { getOnlineImages } from '../images'
 import { favMeta, tagToken } from '../util'
 import { useFavSummaries } from '../favSummaries'
 import type { OnlineGallery, DownloadItem } from '../store'
+import SearchClear from './SearchClear'
 
 const SORTS: [OnlineSort, string][] = [
   ['date', '최신'],
@@ -133,13 +134,16 @@ export default function OnlineList(): JSX.Element {
         />
       </div>
       <div className="lib-search-row">
-        <input
-          className="search sm"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && apply()}
-          placeholder="제목, 코드, 태그, artist:작가명 / tag:태그명 으로 검색 후 Enter"
-        />
+        <div className="search-ac">
+          <input
+            className="search sm"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && apply()}
+            placeholder="제목, 코드, 태그, artist:작가명 / tag:태그명 으로 검색 후 Enter"
+          />
+          <SearchClear value={input} onClear={() => setInput('')} />
+        </div>
         <button className="mini" onClick={apply} title="검색">
           <SearchIcon />
         </button>

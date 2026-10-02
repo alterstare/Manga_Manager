@@ -135,7 +135,11 @@ export default function App(): JSX.Element {
     const onKey = (e: KeyboardEvent): void => {
       const st = useStore.getState()
       const mod = e.ctrlKey || e.metaKey
-      if (e.altKey && e.key === 'ArrowLeft') {
+      if ((mod && !e.altKey && e.code === 'KeyK') || (e.altKey && !mod && e.code === 'KeyD')) {
+        // Ctrl+K / Alt+D — jump to the search box (select its text). e.code so
+        // it works with the Korean IME on.
+        if (focusSearch()) e.preventDefault()
+      } else if (e.altKey && e.key === 'ArrowLeft') {
         e.preventDefault()
         back()
       } else if (e.altKey && e.key === 'ArrowRight') {
@@ -366,4 +370,19 @@ function ReaderSplit(): JSX.Element {
       </div>
     </div>
   )
+}
+
+// Focus the search box of the current view: a visible input.search, preferring
+// one in the same pane as the current focus (split view), else the first.
+function focusSearch(): boolean {
+  const boxes = Array.from(document.querySelectorAll<HTMLInputElement>('input.search')).filter(
+    (el) => el.offsetParent !== null
+  )
+  if (!boxes.length) return false
+  const act = document.activeElement
+  const pane = act?.closest('.split-pane, .pane, .reader')
+  const el = (pane && boxes.find((b) => pane.contains(b))) || boxes[0]
+  el.focus()
+  el.select()
+  return true
 }

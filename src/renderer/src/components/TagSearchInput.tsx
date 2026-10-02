@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { JSX } from 'react'
+import SearchClear from './SearchClear'
 
 // Match a token against the typed term by its VALUE (namespace prefix stripped),
 // so "kagu" matches "artist:kagura" without "artist:" itself swallowing the query.
@@ -165,6 +166,7 @@ export default function TagSearchInput({
           }
         }}
       />
+      <SearchClear value={value} onClear={() => onChange('')} />
       {show && (
         <ul className="search-ac-list">
           {matches.map((t, i) => (

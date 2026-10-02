@@ -1,6 +1,6 @@
 import type { JSX, ReactNode } from 'react'
 import { useStore } from '../store'
-import { DownloadIcon, LanguageIcon } from './icons'
+import { DownloadIcon, LanguageIcon, ShieldIcon } from './icons'
 import Dropdown from './Dropdown'
 
 // Pill switch for the favorites views: ON = purple fill + a glyph, knob right;
@@ -75,22 +75,24 @@ export function FavSortSelect({
   )
 }
 
-// General-manga online toolbar: 보안 DNS (DNS over HTTPS) on/off — same switch
-// as settings › 네트워크; saving re-applies the host resolver in main.
-export function SecureDnsToggle(): JSX.Element {
+// General-manga online toolbar: SNI-bypass tunnel on/off — same switch as
+// settings › 네트워크; saving re-applies the network setup in main.
+// `onApplied` runs once main has switched routes — the switch drops open
+// connections, so in-flight cover loads fail and the view should refetch.
+export function BypassToggle({ onApplied }: { onApplied?: () => void }): JSX.Element {
   const settings = useStore((s) => s.settings)
   return (
     <FavDlToggle
-      checked={settings.secureDns === true}
+      checked={settings.bypassTunnel === true}
       onChange={(v) => {
-        const s = { ...settings, secureDns: v }
+        const s = { ...settings, bypassTunnel: v }
         useStore.setState({ settings: s })
-        void window.api.saveSettings(s)
+        void window.api.saveSettings(s).then(() => onApplied?.())
       }}
-      icon={<span className="fav-dl-text">DNS</span>}
+      icon={<ShieldIcon />}
       offLabel="OFF"
-      onTitle="보안 DNS (DNS over HTTPS) 켜짐"
-      offTitle="보안 DNS 꺼짐 — 클릭해서 켜기"
+      onTitle="차단 우회(GreenTunnel) 켜짐"
+      offTitle="차단 우회 꺼짐 — 연결이 끊길 때 켜기"
     />
   )
 }

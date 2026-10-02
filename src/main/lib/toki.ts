@@ -28,7 +28,8 @@ import type {
 
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-const PARTITION = 'persist:toki'
+export const TOKI_PARTITION = 'persist:toki'
+const PARTITION = TOKI_PARTITION
 
 const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
@@ -495,11 +496,20 @@ const READ_SCRIPT = `(() => {
       }
     }
   }
-  // 3) Last resort: every image on the page that looks like a content page file.
+  // 3) Last resort: every image on the page that looks like a content page file
+  //    — except the site's ad banners (plus comment avatars / logo): banners
+  //    sit in links that open a new tab and carry the advertiser's URL as alt
+  //    (pages have alt="page N"). Their
+  //    URLs (…/board_uploads/….png|jpg) pass uiBad, so they must be skipped
+  //    here; no images at all beats a "chapter" made of ads.
   if (out.length === 0) {
+    const isAd = (img) =>
+      /^https?:/i.test(img.getAttribute('alt') || '') ||
+      !!img.closest('a[target=_blank]') ||
+      /avatar|logo|icon|brand/i.test(img.className || '') // comment avatars, site logo
     for (const img of document.querySelectorAll('img')) {
       const u = lazy(img)
-      if (u && /\\.(jpe?g|png|webp|gif)(\\?|$)/i.test(u)) push(u)
+      if (u && /\\.(jpe?g|png|webp|gif)(\\?|$)/i.test(u) && !isAd(img)) push(u)
     }
   }
   return out
@@ -647,9 +657,23 @@ export async function tokiAuthorForTitle(base: string, title: string): Promise<s
   return tokiSeriesAuthor(base, hit.url)
 }
 
+// The viewer box (.vw-imgs) exists as soon as the page renders, but its <img>s
+// arrive later from the site's image API. ensure() counts the empty box as
+// "ready", so on a slow connection READ_SCRIPT ran before any page image
+// existed and fell through to the last-resort scan (= the ad banners). Wait
+// until a page image shows up — returns at once when it's already there, gives
+// up after `ms` (then READ_SCRIPT's fallbacks run as before).
+const HAS_PAGE_IMG = `!!document.querySelector('.vw-imgs img, img.viewer-lazy-img, img.viewer-ratio-img')`
+async function waitPageImages(ms: number): Promise<void> {
+  const end = Date.now() + ms
+  while (!(await evalPage<boolean>(HAS_PAGE_IMG, false)) && Date.now() < end) await delay(300)
+}
+
 export async function tokiReadUrls(_base: string, chapterUrl: string): Promise<string[]> {
   return queue(async () => {
     await ensure(chapterUrl, true)
+    status('만화 이미지를 기다리는 중…')
+    await waitPageImages(20000)
     return evalPage<string[]>(READ_SCRIPT, [])
   })
 }

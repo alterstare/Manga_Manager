@@ -42,10 +42,10 @@ export default function NetworkSection(): JSX.Element {
           </p>
         )}
         <SettingRow
-          title="보안 DNS (DNS over HTTPS)"
-          desc="크롬의 '보안 DNS'와 같은 기능입니다. 통신사 DNS 대신 암호화된 DNS(Cloudflare·Google)를 써서 DNS 차단을 우회합니다. 주소(SNI) 단위 차단은 사이트가 ECH를 지원할 때만 우회됩니다."
+          title="일반 만화 차단 우회 (GreenTunnel)"
+          desc="일반 만화 사이트 접속에만 내장 우회 프록시를 씁니다. 접속 요청을 잘게 나눠 보내 통신사의 주소(SNI) 차단을 피하고, DNS는 암호화(DoH)로 조회합니다. 연결이 자꾸 끊길 때 켜세요."
         >
-          <Toggle checked={draft.secureDns === true} onChange={(v) => patch({ secureDns: v })} />
+          <Toggle checked={draft.bypassTunnel === true} onChange={(v) => patch({ bypassTunnel: v })} />
         </SettingRow>
         <div className="set-block">
           <SettingRow title="프록시" desc="로컬 프록시/VPN 포트를 쓰면 입력. 비우면 시스템 설정을 사용합니다." />

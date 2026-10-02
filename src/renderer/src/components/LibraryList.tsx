@@ -12,6 +12,7 @@ import ContextMenu from './ContextMenu'
 import type { MenuItem } from './ContextMenu'
 import ConfirmModal from './ConfirmModal'
 import Pager from './Pager'
+import SearchClear from './SearchClear'
 
 const PAGE_SIZE = 40 // hitomi list is paginated (like the online list) to keep the
 // DOM small — an unvirtualized full library made the pane-resize reflow stutter.
@@ -192,13 +193,16 @@ export default function LibraryList(): JSX.Element {
         </div>
       )}
       <div className="lib-search-row">
-        <input
-          className="search sm"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && apply()}
-          placeholder="검색 후 Enter (태그/작가 클릭 시 추가)"
-        />
+        <div className="search-ac">
+          <input
+            className="search sm"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && apply()}
+            placeholder="검색 후 Enter (태그/작가 클릭 시 추가)"
+          />
+          <SearchClear value={input} onClear={() => setInput('')} />
+        </div>
         <button className="mini search-btn" onClick={apply} title="검색">
           <SearchIcon />
         </button>

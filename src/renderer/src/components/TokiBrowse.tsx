@@ -10,10 +10,11 @@ import TokiBackupModal from './TokiBackupModal'
 import OnlineThumb from './OnlineThumb'
 import { getOnlineImages } from '../images'
 import { SearchIcon, FavoriteIcon, DownloadIcon } from './icons'
-import { SecureDnsToggle, OnlineOnlyToggle, FavSortSelect } from './FavDlToggle'
+import { BypassToggle, OnlineOnlyToggle, FavSortSelect } from './FavDlToggle'
 import Pager from './Pager'
 import { groupSeries, titleKey, isTokiCode } from '../util'
 import { useTokiStatus } from './useTokiStatus'
+import SearchClear from './SearchClear'
 
 const SORTS: [TokiSort, string][] = [
   ['date', '최신순'],
@@ -304,20 +305,23 @@ export default function TokiBrowse(): JSX.Element {
             <option value="title">제목</option>
             <option value="author">작가</option>
           </select>
-          <input
-            className="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && run()}
-            placeholder={field === 'author' ? '작가 검색 후 Enter' : '제목 검색 후 Enter (비우면 둘러보기)'}
-          />
+          <div className="search-ac">
+            <input
+              className="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && run()}
+              placeholder={field === 'author' ? '작가 검색 후 Enter' : '제목 검색 후 Enter (비우면 둘러보기)'}
+            />
+            <SearchClear value={query} onClear={() => setQuery('')} />
+          </div>
           <button className="btn primary" onClick={run} title="검색">
             <SearchIcon />
           </button>
         </div>
 
         <div className="chips">
-          <SecureDnsToggle />
+          <BypassToggle onApplied={() => !favMode && setReloadKey((k) => k + 1)} />
           {TYPES.map(([v, l]) => (
             <button
               key={v}

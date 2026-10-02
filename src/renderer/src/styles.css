@@ -2935,15 +2935,6 @@ button:active,
 .toggle.fav-dl.on .fav-dl-all {
   opacity: 0;
 }
-.toggle.fav-dl .fav-dl-icon:has(.fav-dl-text) {
-  left: 6px; /* "DNS" is wider than the glyph icons */
-}
-.toggle.fav-dl .fav-dl-text {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-
 /* Filled favorite heart in the "즐겨찾기" filter chips → always red, with a gap
    before the label so the icon and text aren't cramped. */
 .fav-ico {
@@ -4835,4 +4826,47 @@ select:focus,
    are no tags (general-manga favorites) to fill the space above it. */
 .online-fav-row .work-actions {
   margin-top: auto;
+}
+
+/* Clear-query "X" at the right end of a search box (SearchClear). */
+.search-ac > .search {
+  padding-right: 38px;
+}
+.lib-search-row .search-ac > .search.sm {
+  width: 100%;
+  padding-right: 28px;
+}
+.search-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.search-clear:hover {
+  background: var(--bg-3, rgba(127, 127, 127, 0.18));
+  color: var(--text);
+}
+.search-clear svg {
+  width: 16px;
+  height: 16px;
+}
+.lib-search-row .search-clear {
+  right: 4px;
+  width: 20px;
+  height: 20px;
+}
+.lib-search-row .search-clear svg {
+  width: 14px;
+  height: 14px;
 }

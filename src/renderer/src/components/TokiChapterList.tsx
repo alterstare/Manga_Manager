@@ -7,6 +7,7 @@ import type { OnlineFav } from '../../../shared/types'
 import Stars from './Stars'
 import { SearchIcon, FavoriteIcon, AutoStoriesIcon } from './icons'
 import { useTokiStatus } from './useTokiStatus'
+import SearchClear from './SearchClear'
 
 // Left list shown while reading a toki chapter: the sibling chapters of the active
 // tab's series. Mirrors the local general-manga left list (LibraryList) so the
@@ -70,13 +71,16 @@ export default function TokiChapterList(): JSX.Element {
         </span>
       </div>
       <div className="lib-search-row">
-        <input
-          className="search sm"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && apply()}
-          placeholder="검색 후 Enter"
-        />
+        <div className="search-ac">
+          <input
+            className="search sm"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && apply()}
+            placeholder="검색 후 Enter"
+          />
+          <SearchClear value={input} onClear={() => setInput('')} />
+        </div>
         <button className="mini" onClick={apply} title="검색">
           <SearchIcon />
         </button>
