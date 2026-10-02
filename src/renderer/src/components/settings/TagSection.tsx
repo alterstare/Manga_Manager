@@ -271,14 +271,14 @@ export default function TagSection(): JSX.Element {
         <div className="set-block">
           <SettingRow
             title="검색 제외 태그"
-            desc="여기 등록한 태그는 온라인 검색 시 자동으로 제외됩니다. 검색창에는 표시되지 않습니다. 태그 입력 후 Enter. (예: female:netorare)"
+            desc="여기 등록한 태그는 온라인 검색 시 자동으로 제외됩니다. 검색창에는 표시되지 않습니다."
           />
           <TagPickInput
             value={excludeInput}
             onChange={setExcludeInput}
             tokens={allTagTokens}
             className="field-input"
-            placeholder="태그 입력 후 Enter (예: female:netorare)"
+            placeholder="태그 입력 후 Enter"
             onEnter={() => {
               if (!excludeInput.trim()) return
               const tok = tagToken(excludeInput.trim())

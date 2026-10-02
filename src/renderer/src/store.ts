@@ -405,6 +405,7 @@ interface AppState {
   searchOnline: (query: string) => void
   searchLocal: (query: string) => void
   addFavoriteTag: (tag: string) => void // add a tag/artist to the highlighted set
+  toggleExcludeTag: (token: string) => void // add/remove a hitomi 검색 제외 태그 (search token)
   setBrowsePage: (p: number) => void
   searchTokiAuthor: (name: string) => void
   setOnlineProgress: (code: string, p: { scrollTop: number; pageIdx: number }) => void
@@ -1651,6 +1652,15 @@ export const useStore = create<AppState>((set, get) => ({
     const s = { ...cur, favoriteTags: [...cur.favoriteTags, t] }
     set({ settings: s })
     await window.api.saveSettings(s)
+  },
+  toggleExcludeTag: (token) => {
+    const cur = get().settings
+    const t = token.trim()
+    if (!t) return
+    const list = cur.onlineExcludeTags ?? []
+    const s = { ...cur, onlineExcludeTags: list.includes(t) ? list.filter((x) => x !== t) : [...list, t] }
+    set({ settings: s })
+    void window.api.saveSettings(s)
   },
   setBrowsePage: (p) => set({ browsePage: p }),
   // Jump to general-manga online browse and run an author search for `name`.

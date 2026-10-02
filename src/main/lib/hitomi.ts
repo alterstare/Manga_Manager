@@ -496,6 +496,38 @@ export async function fetchNozomi(
   return { ids, total: total ? Math.floor(total / 4) : ids.length }
 }
 
+// Index browse (latest / popular) minus excluded tags. Plain browse fetches only
+// the requested page by byte range, which can't skip anything — so with
+// exclusions the whole list is fetched (cached 10 min), the excluded tags' ids
+// are subtracted, and the page is cut from what's left.
+const fullNozomiCache = new Map<string, { ids: number[]; at: number }>()
+async function cachedIds(key: string, load: () => Promise<number[]>): Promise<number[]> {
+  const c = fullNozomiCache.get(key)
+  if (c && Date.now() - c.at < 600_000) return c.ids
+  const ids = await load()
+  fullNozomiCache.set(key, { ids, at: Date.now() })
+  return ids
+}
+
+export async function fetchNozomiExcluding(
+  source: { kind: 'index'; language: string | null; sort?: string },
+  page: number,
+  pageSize: number,
+  exclude: string[]
+): Promise<NozomiPage> {
+  const toks = exclude.map((t) => t.replace(/^-/, '').trim()).filter(Boolean)
+  if (!toks.length) return fetchNozomi(source, page, pageSize)
+  const path = nozomiPath(source)
+  let all = await cachedIds(path, async () => idsFromBuf((await httpsGetFull(ltn() + path)).body))
+  for (const tok of toks) {
+    const ids = await cachedIds(`tok:${tok}`, () => fetchTokenIds(tok, 'all'))
+    if (!ids.length) continue
+    const set = new Set(ids)
+    all = all.filter((x) => !set.has(x))
+  }
+  return { ids: all.slice(page * pageSize, page * pageSize + pageSize), total: all.length }
+}
+
 function idsFromBuf(buf: Buffer): number[] {
   const ids: number[] = []
   for (let i = 0; i + 3 < buf.length; i += 4) ids.push(buf.readInt32BE(i))
@@ -737,8 +769,9 @@ export async function searchNozomi(
   const raw = tokenizeQuery(query)
   const positives = raw.filter((t) => !t.startsWith('-'))
   const negatives = raw.filter((t) => t.startsWith('-')).map((t) => t.slice(1)).filter(Boolean)
-  // No positive token: nothing to anchor on — fall back to plain index browse.
-  if (!positives.length) return fetchNozomi({ kind: 'index', language }, page, pageSize)
+  // No positive token: nothing to anchor on — fall back to index browse (still
+  // honoring the "-tag" exclusions).
+  if (!positives.length) return fetchNozomiExcluding({ kind: 'index', language }, page, pageSize, negatives)
 
   let inter: number[] | null = null
   for (const tok of positives) {

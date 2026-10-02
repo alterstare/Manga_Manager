@@ -4303,11 +4303,16 @@ select:focus,
   min-width: 0;
 }
 .set-title {
+  word-break: keep-all;
   font-size: 15px;
   font-weight: 700;
   color: var(--text);
 }
 .set-desc {
+  /* Korean wraps per syllable by default ("없습니/다") — break between words. */
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  text-wrap: pretty;
   font-size: 12.5px;
   color: #565b6d; /* darker gray than secondary text (matches reference) */
   margin-top: 5px;
@@ -4316,8 +4321,14 @@ select:focus,
 :root[data-theme='dark'] .set-desc {
   color: #7a8093;
 }
+/* One sentence per line (SettingRow splits plain-text descriptions). */
+.set-line {
+  display: block;
+}
 /* Settings sub-descriptions use the same darker gray as .set-desc. */
 .settings .hint {
+  word-break: keep-all;
+  overflow-wrap: break-word;
   color: #565b6d;
 }
 :root[data-theme='dark'] .settings .hint {

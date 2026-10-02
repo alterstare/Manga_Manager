@@ -13,7 +13,6 @@ import {
   writeSidecar,
   downloadGallery,
   extractCode,
-  fetchNozomi,
   searchNozomi,
   summary,
   readImageUrls,
@@ -21,8 +20,7 @@ import {
   pingHitomi,
   popularRanks,
   findKorean,
-  hitomiExists
-} from '../lib/hitomi'
+  hitomiExists, fetchNozomiExcluding } from '../lib/hitomi'
 import { suggestTokens, recordSeen } from '../lib/suggest'
 import { encodeWeb, thumbFile } from '../lib/media'
 import { runDownload, stopDownload } from '../downloads'
@@ -96,7 +94,8 @@ export function registerHitomiIpc(): void {
             pageSize,
             source.sort ?? 'date'
           )
-        : await fetchNozomi(source, page, pageSize)
+        : // Browse (latest / popular) also honors 설정 › 검색 제외 태그.
+          await fetchNozomiExcluding(source, page, pageSize, store.settings.onlineExcludeTags ?? [])
     // Fetch summaries 6 at a time; unreachable galleries are dropped.
     const items: GallerySummary[] = []
     for (let i = 0; i < ids.length; i += 6) {
