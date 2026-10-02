@@ -2,8 +2,8 @@
 // of every IPC module. The handlers themselves live in ./ipc/*:
 //   ipc/library.ts    local library, works, settings, thumbnails, exit/reset
 //   ipc/favorites.ts  favorite files/lists and online favorites
-//   ipc/hitomi.ts     hitomi online, metadata, downloads
-//   ipc/toki.ts       general-manga online (toki / backup sites)
+//   ipc/hitomi.ts     doujin online, metadata, downloads
+//   ipc/toki.ts       general-manga online (manga-site / backup sites)
 import { app, BrowserWindow, ipcMain, Menu, nativeTheme, globalShortcut } from 'electron'
 import electronUpdater from 'electron-updater'
 import { join } from 'path'
@@ -68,7 +68,7 @@ function createWindow(): void {
   win.on('ready-to-show', () => win.show())
 
   // Drop the ref once the window is gone, and force-close leftover windows (the
-  // toki scraper vetoes close; destroy() bypasses that) so window-all-closed
+  // manga-site scraper vetoes close; destroy() bypasses that) so window-all-closed
   // fires and the app quits instead of lingering as a zombie.
   win.on('closed', () => {
     setMainWindow(null)
@@ -144,7 +144,7 @@ function setupAutoUpdate(): void {
 }
 
 // Single-instance lock: a second launch would fight over the same userData /
-// persist:toki disk cache ("Unable to move the cache (0x5)"), breaking the toki
+// persist:manga-site disk cache ("Unable to move the cache (0x5)"), breaking the manga-site
 // scraper. Enforced only in the packaged app — in dev, electron-vite manages a
 // single electron, and a zombie left by an HMR restart would otherwise make the
 // fresh launch quit instantly. isDev = renderer served by the vite dev server.
@@ -193,7 +193,7 @@ app.whenReady().then(async () => {
   })
 })
 
-// From here on every close veto (main window + toki scraper) stands down.
+// From here on every close veto (main window + manga-site scraper) stands down.
 app.on('before-quit', () => {
   appState.quitting = true
 })

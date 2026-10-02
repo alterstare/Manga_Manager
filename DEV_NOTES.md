@@ -1,8 +1,8 @@
 # manga-viewer-2 — Developer / AI Handoff Notes
 
-Windows Electron manga viewer. Two independent library modes: **hitomi** (coded
-doujinshi galleries, downloaded from hitomi.la) and **normal** (general manga /
-webtoons scraped from "toki"-family sites + a gnuboard "backup" site). This file
+Windows Electron manga viewer. Two independent library modes: **doujin** (coded
+doujinshi galleries, downloaded from the site) and **normal** (general manga /
+webtoons scraped from manga-site family sites + a gnuboard "backup" site). This file
 documents the conventions, architecture, and design tokens needed to keep coding
 in a fresh context without re-deriving everything.
 
@@ -43,7 +43,7 @@ auto-update, startup migrations) and registers the IPC modules:
 | `main/context.ts` | shared `store`, `appState` (closing/quitting), `getMainWindow`, `sendToRenderer` |
 | `main/ipc/library.ts` | settings, scan, works (rank/groups/tags/views), folders, thumbnails, translation, exports, exit/reset |
 | `main/ipc/favorites.ts` | hearts by code, favorites file (export/import/merge), favorite lists, gallery summaries |
-| `main/ipc/hitomi.ts` | hitomi browse/search, metadata enrich, deleted-sweep, cover regen, download |
+| `main/ipc/hitomi.ts` | doujin browse/search, metadata enrich, deleted-sweep, cover regen, download |
 | `main/ipc/toki.ts` | general-manga online: list/chapters/images/author/cover, downloads |
 | `main/downloads.ts` | `runDownload(code, title, task)` — slot gate, stop, progress for ALL downloads |
 | `main/lib/media.ts` | `mangaimg://` protocol, url encoders, thumbnail cache files |
@@ -69,7 +69,7 @@ Renderer calls everything via `window.api.*` (typed by `Api`).
 - **`settings` in the store is EFFECTIVE settings** (per-mode overlay already
   merged). `effectiveSettings(raw, mode)` overlays `settings.perMode[mode]` onto the
   base. Keys listed in `SPLIT_SETTING_KEYS` are per-mode; everything else is shared.
-  - When adding a setting: if it should differ between hitomi/normal, add its key to
+  - When adding a setting: if it should differ between doujin/normal, add its key to
     `SPLIT_SETTING_KEYS`; otherwise it's shared (the common case).
 - `works: Work[]`, `downloads: DownloadItem[]`, `jobs: Job[]`, `tabs`, etc.
 - `addWork(w)` upserts into `works`. `mergeScanPartial` (main side) merges scan
@@ -88,7 +88,7 @@ type DownloadSpec =
   | { kind: 'toki'; seriesUrl: string; title: string; chapterUrls?: string[] }
   | { kind: 'generic'; title: string; chapters: TokiChapter[]; only?: string[] }
 ```
-- `specCode(spec)` derives the progress code (hitomi numeric code / toki seriesUrl /
+- `specCode(spec)` derives the progress code (doujin numeric code / manga-site seriesUrl /
   `backup:<title>`) — must match the `code` main emits on the progress channel.
 - `startDownload` seeds a `DownloadItem` (phase `queued`, stores `spec` for
   retry), invokes the right IPC, `addWork`s results, returns `Work[]` — or **`null`
@@ -104,7 +104,7 @@ type DownloadSpec =
 
 ## 4. Downloads: queue, concurrency, cancellation (main)
 
-- Every download (hitomi gallery, toki series, backup-site chapters) runs through
+- Every download (doujin gallery, manga-site series, backup-site chapters) runs through
   **`runDownload(code, title, task)`** in `main/downloads.ts`: waits for a slot
   (`settings.maxConcurrentDownloads`, 0 = unlimited, read per acquire, FIFO),
   wires the stop button to an `AbortSignal`, and reports `queued → fetching →
@@ -113,10 +113,10 @@ type DownloadSpec =
 - Stop = `stopDownload(code)` (IPC `download:stop`) → abort → `stopped` + rejects
   with `STOP_MSG` (`'DOWNLOAD_STOPPED'`), which the renderer treats as non-error.
 - Lib functions take `signal?` and `signal?.throwIfAborted()` per loop step
-  (hitomi per image, toki per chapter). Toki chapter images save 4 at a time
+  (doujin per image, manga-site per chapter). Manga-site chapter images save 4 at a time
   and are resumable (files already on disk are skipped).
 - `HitomiProgress.phase`: `'queued' | 'fetching' | 'downloading' | 'enriching' |
-  'done' | 'error' | 'stopped'`. Code = hitomi code / toki seriesUrl / `backup:<title>`.
+  'done' | 'error' | 'stopped'`. Code = doujin code / manga-site seriesUrl / `backup:<title>`.
 
 ---
 
@@ -124,11 +124,11 @@ type DownloadSpec =
 
 - `scanRoot` / `scanOne` stamp `work.library = 'hitomi' | 'normal'` based on **which
   root the folder lives under** (`normalRoots(settings)`), NOT by code presence.
-- Hitomi gallery-id detection is **pattern-driven** (`src/main/lib/parser.ts`
+- Doujin gallery-id detection is **pattern-driven** (`src/main/lib/parser.ts`
   `parseName(folderName, patterns)`):
   - User patterns in `settings.hitomiNamePatterns` (shared setting), tokens
     `-id-` `-title-` `-artist-` `-group-` `-language-`. `-id-` compiles to `(\d{4,})`
-    and is **required** — a folder is a hitomi work only if a pattern matches AND the
+    and is **required** — a folder is a doujin work only if a pattern matches AND the
     id slot has digits. Prevents incidental 7-digit numbers in titles being read as
     codes.
   - `DEFAULT_HITOMI_PATTERNS` is the fallback list. Patterns tried in order.
@@ -216,7 +216,7 @@ in-progress, `✓`/`✗`/`■`/`▶`/`⏸`/`⬇` glyph prefixes for status/actio
 - **`cd` into the project** before npm (cwd resets outside it).
 - Typecheck is strict about unused locals — when replacing a selector (e.g. swapping
   `addWork` for `startDownload`), remove the old one.
-- Sandbox blocks hitomi network in some contexts; real downloads run in the packaged
+- Sandbox blocks doujin network in some contexts; real downloads run in the packaged
   app / normal dev run.
 - Online list pagination: clear items (`setItems([])`) before fetching the next page
   so the previous page doesn't linger under the loader (Browse.tsx, TokiBrowse.tsx,
@@ -236,8 +236,8 @@ in-progress, `✓`/`✗`/`■`/`▶`/`⏸`/`⬇` glyph prefixes for status/actio
 | App lifecycle | `src/main/index.ts` |
 | IPC handlers | `src/main/ipc/*.ts` (§2) |
 | Favorites model | `src/main/lib/favoriteSync.ts` |
-| Hitomi client (DoH, gg.js, download) | `src/main/lib/hitomi.ts` |
-| Toki scraper (hidden window) | `src/main/lib/toki.ts` |
+| Doujin client (DoH, gg.js, download) | `src/main/lib/hitomi.ts` |
+| Manga-site scraper (hidden window) | `src/main/lib/toki.ts` |
 | Scanner / parser | `src/main/lib/scanner.ts`, `src/main/lib/parser.ts` |
 | Renderer store (sections marked) | `src/renderer/src/store.ts` |
 | Favorites list builders | `src/renderer/src/favorites.ts` |
@@ -251,10 +251,10 @@ in-progress, `✓`/`✗`/`■`/`▶`/`⏸`/`⬇` glyph prefixes for status/actio
 
 ## 10. Favorites model (2026-10)
 
-- ONE heart per gallery: works with a hitomi code → the favorites list
+- ONE heart per gallery: works with a doujin code → the favorites list
   (`store.onlineFavs`, keyed by code); every local copy's `Work.favorite`
   mirrors it. Uncoded works keep `Work.favorite`. General manga uses in-app
-  lists (`settings.normalFavSeries` / `normalFavChapters`), linked to online toki
+  lists (`settings.normalFavSeries` / `normalFavChapters`), linked to online manga-site
   favorites (keyed by series url) by normalized title (`titleKey`).
 - All heart changes go through main `setFavoriteByCode` / `setWorkFavorite`
   (renderer: `store.toggleUnifiedFav`, `setWorkFavorite`).

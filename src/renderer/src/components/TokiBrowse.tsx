@@ -29,15 +29,15 @@ const TYPES: [TokiType, string][] = [
   ['webtoon', '웹툰']
 ]
 
-// Meta cached alongside a toki online favorite (keyed by the series url).
+// Meta cached alongside a manga-site online favorite (keyed by the series url).
 function favMeta(g: TokiSummary, artist: string | null): Partial<OnlineFav> {
   return { title: g.title, artist, thumbUrl: g.thumb, language: null, pageCount: 0 }
 }
 
-// General-manga online browse (toki-family mirror). Full-screen, mirrors the
-// hitomi Browse. Clicking a series fetches its chapters and opens chapter 1.
+// General-manga online browse (manga-site-family mirror). Full-screen, mirrors the
+// doujin Browse. Clicking a series fetches its chapters and opens chapter 1.
 // Favorites/ratings reuse the online-fav store, keyed by the series url (http),
-// which keeps them separate from hitomi's numeric-code favorites.
+// which keeps them separate from the doujin numeric-code favorites.
 const NO_GENRES: string[] = []
 
 export default function TokiBrowse(): JSX.Element {
@@ -185,7 +185,7 @@ export default function TokiBrowse(): JSX.Element {
   }, [authorSeed?.nonce])
 
   // Local general-manga series (downloaded), keyed by normalized title — links a
-  // local series with its online toki counterpart (they share only the title).
+  // local series with its online manga-site counterpart (they share only the title).
   const localSeries = useMemo(() => {
     const m = new Map<string, { key: string; title: string; repId: string; artist: string | null }>()
     for (const g of groupSeries(works.filter((w) => (w.library ?? 'hitomi') === 'normal'), roots)) {
@@ -204,7 +204,7 @@ export default function TokiBrowse(): JSX.Element {
   const isFavTitle = (g: TokiSummary): boolean =>
     !!onlineFavs[g.url]?.favorite || localFavKeys.has(titleKey(g.title))
 
-  // Unified favorites: online toki favorites + locally-favorited series that have
+  // Unified favorites: online manga-site favorites + locally-favorited series that have
   // no online favorite yet (url `local:<key>` → opens the downloaded series).
   const normalFavAt = useStore((s) => s.settings.normalFavAt)
   const favGalleries = useMemo<TokiSummary[]>(() => {
@@ -487,7 +487,7 @@ export default function TokiBrowse(): JSX.Element {
                   thumbUrl={g.thumb}
                   localWorkId={localSeries.get(titleKey(g.title))?.repId || undefined}
                   getImgs={async () => {
-                    // toki: series URL → first chapter → its images.
+                    // manga-site: series URL → first chapter → its images.
                     const ch = await window.api.tokiChapters(g.url)
                     return ch[0] ? getOnlineImages(ch[0].url) : []
                   }}

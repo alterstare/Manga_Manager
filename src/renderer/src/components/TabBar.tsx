@@ -5,7 +5,7 @@ import type { Tab, TabGroup } from '../store'
 import ContextMenu from './ContextMenu'
 import type { MenuItem } from './ContextMenu'
 import { groupSeries, analyzeSeries } from '../util'
-import { HomeIcon, LanguageIcon, MenuIcon, DownloadIcon, SettingsIcon, CloseIcon } from './icons'
+import { HomeIcon, LanguageIcon, MenuIcon, DownloadIcon, SettingsIcon, CloseIcon, CompareArrowsIcon } from './icons'
 
 export default function TabBar(): JSX.Element {
   const tabs = useStore((s) => s.tabs)
@@ -256,7 +256,7 @@ export default function TabBar(): JSX.Element {
     const info = normalLabels.get(w.id)
     return info && info.series ? `${info.label} · ${info.series}` : w.title
   }
-  // Toki chapter tabs read "n화 · 시리즈명"; hitomi/others use the title as-is.
+  // Manga-site chapter tabs read "n화 · 시리즈명"; doujin/others use the title as-is.
   const onlineLabel = (o: { title: string; chapterLabel?: string }): string =>
     o.chapterLabel && !o.title.includes(o.chapterLabel) ? `${o.chapterLabel} · ${o.title}` : o.title
   const titleOf = (t: Tab): string =>
@@ -295,7 +295,7 @@ export default function TabBar(): JSX.Element {
   }, [curTabs, tabGroups])
 
   const OTHER = '__othermode__'
-  const otherLabel = libraryMode === 'hitomi' ? '일반 만화' : '히토미'
+  const otherLabel = libraryMode === 'hitomi' ? '일반 만화' : '동인지'
 
   const toggle = (id: string): void =>
     setExpanded((s) => {
@@ -367,6 +367,15 @@ export default function TabBar(): JSX.Element {
         onClick={() => useStore.getState().toggleMenu()}
       >
         <MenuIcon />
+      </button>
+      {/* Library mode switch (동인지 ⇄ 일반 만화) — also in the menu and Ctrl+G;
+          shown here so it's easy to find; the tooltip names the target mode. */}
+      <button
+        className="tab mode-tab"
+        onClick={() => useStore.getState().setLibraryMode(libraryMode === 'normal' ? 'hitomi' : 'normal')}
+        title={`${libraryMode === 'normal' ? '동인지' : '일반 만화'} 모드로 전환`}
+      >
+        <CompareArrowsIcon />
       </button>
       <button
         className={`tab home-tab ${view === 'home' ? 'active' : ''}`}

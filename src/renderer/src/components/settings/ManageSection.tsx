@@ -98,9 +98,9 @@ export default function ManageSection(): JSX.Element {
     []
   )
 
-  // ---- hitomi ----
+  // ---- doujin ----
 
-  // Fill artist/tags/language of every coded work from hitomi. Pressing again
+  // Fill artist/tags/language of every coded work from doujin. Pressing again
   // while running cancels.
   const enrichAll = async (): Promise<void> => {
     if (enriching) {
@@ -140,12 +140,12 @@ export default function ManageSection(): JSX.Element {
     }
   }
 
-  // Rebuild every hitomi thumbnail: the online cover when the work has a code,
+  // Rebuild every doujin thumbnail: the online cover when the work has a code,
   // else (or if that fails) the local first page.
   const regenThumbs = async (): Promise<void> => {
     const ids = thumbTargetIds(works, 'hitomi', seriesRoots(draft))
     if (!ids.length) {
-      notify('히토미 작품이 없습니다.')
+      notify('동인지 작품이 없습니다.')
       return
     }
     setRegenProg({ done: 0, total: ids.length })
@@ -172,7 +172,7 @@ export default function ManageSection(): JSX.Element {
     notify(`썸네일 재생성 완료 — ${done}개.`)
   }
 
-  // Move works whose code 404s on hitomi into the deleted-works folder.
+  // Move works whose code 404s on doujin into the deleted-works folder.
   const classifyDeleted = async (): Promise<void> => {
     if (!draft.deletedDir) {
       notify('먼저 “삭제된 작품 폴더”를 지정하세요.')
@@ -325,7 +325,7 @@ export default function ManageSection(): JSX.Element {
               <Toggle checked={draft.autoOrganizeOnScan} onChange={(v) => patch({ autoOrganizeOnScan: v })} />
             </SettingRow>
             {scanRow}
-            <SettingRow title="전체 메타 채우기" desc="코드가 있는 작품의 작가·태그·언어를 hitomi에서 일괄로 채웁니다.">
+            <SettingRow title="전체 메타 채우기" desc="코드가 있는 작품의 작가·태그·언어를 온라인에서 일괄로 채웁니다.">
               <button className={`btn ${enriching ? 'danger' : ''}`} onClick={enrichAll}>
                 {enriching ? '■ 중지' : '실행'}
               </button>
@@ -337,7 +337,7 @@ export default function ManageSection(): JSX.Element {
             </SettingRow>
             <SettingRow
               title="썸네일 재생성"
-              desc="히토미 작품은 온라인 표지로, 검색 안 되거나 코드가 없는 작품은 첫 페이지로 만듭니다."
+              desc="동인지 작품은 온라인 표지로, 검색 안 되거나 코드가 없는 작품은 첫 페이지로 만듭니다."
             >
               <button className="btn" onClick={regenThumbs} disabled={regenProg !== null}>
                 {regenProg ? `재생성 중… ${regenProg.done}/${regenProg.total}` : '실행'}
@@ -442,8 +442,8 @@ export default function ManageSection(): JSX.Element {
             </SettingRow>
             <div className="set-block">
               <SettingRow
-                title="히토미에서 삭제된 작품 분류"
-                desc="코드가 있는 작품 중 히토미에서 더 이상 검색되지 않는 작품을 지정 폴더로 모읍니다. (확인 불가는 건너뜀)"
+                title="온라인에서 삭제된 작품 분류"
+                desc="코드가 있는 작품 중 온라인에서 더 이상 검색되지 않는 작품을 지정 폴더로 모읍니다. (확인 불가는 건너뜀)"
               >
                 <button
                   className="mini"
@@ -497,7 +497,7 @@ export default function ManageSection(): JSX.Element {
       {isHitomi && (
         <section data-cat="manage">
           <h2>모드</h2>
-          <SettingRow title="일반 만화 모드와 탭 통합" desc="히토미와 일반 만화의 탭을 한 줄로 함께 표시합니다. 끄면 모드별로 탭이 분리됩니다.">
+          <SettingRow title="일반 만화 모드와 탭 통합" desc="동인지와 일반 만화의 탭을 한 줄로 함께 표시합니다. 끄면 모드별로 탭이 분리됩니다.">
             <Toggle checked={draft.unifyTabsAcrossModes} onChange={(v) => patch({ unifyTabsAcrossModes: v })} />
           </SettingRow>
         </section>

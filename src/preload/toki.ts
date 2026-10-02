@@ -1,4 +1,4 @@
-// Preload for the hidden/visible toki scraping window ONLY (contextIsolation
+// Preload for the hidden/visible manga-site scraping window ONLY (contextIsolation
 // off → runs in the page's main world, before the site's scripts). Two jobs:
 //  1. Neutralize WebRTC so the page can't probe STUN (stun.l.google.com), which
 //     on the user's network fails DNS (-105) and spams errors / feeds the site's

@@ -50,7 +50,7 @@ export default function Download(): JSX.Element {
   const allDownloads = useStore((s) => s.downloads)
   const jobs = useStore((s) => s.jobs)
   const clearDone = useStore((s) => s.clearDoneJobs)
-  // Show only this mode's downloads (hitomi vs general-manga are separate lists).
+  // Show only this mode's downloads (doujin vs general-manga are separate lists).
   const downloads = allDownloads.filter((d) => downloadMode(d.code) === libraryMode)
   // Full activity list for this mode: jobs + downloads, running first, history kept.
   const rows: Row[] = [
@@ -99,7 +99,7 @@ export default function Download(): JSX.Element {
     setPreview(null)
     const code = (input.match(/\d{5,}/) ?? [])[0]
     if (!code) {
-      setError('코드를 찾을 수 없습니다 (숫자 코드 또는 hitomi 주소 입력)')
+      setError('코드를 찾을 수 없습니다 (숫자 코드 또는 작품 주소 입력)')
       return
     }
     setBusy(true)
@@ -236,8 +236,8 @@ export default function Download(): JSX.Element {
         </div>
       ) : (
       <div className="download-inner">
-        <div className="badge">HITOMI</div>
-        <h1>hitomi.la 다운로드</h1>
+        <div className="badge">DOUJINSHI</div>
+        <h1>동인지 다운로드</h1>
         <p className="sub">갤러리 코드 또는 주소를 붙여넣으세요. 메타데이터(작가·태그·언어)도 함께 저장됩니다.</p>
 
         {!destReady && (
@@ -250,7 +250,7 @@ export default function Download(): JSX.Element {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && fetchPreview()}
-            placeholder="예: 2421331  또는  https://hitomi.la/reader/2421331.html"
+            placeholder="예: 2421331  또는  작품 주소"
           />
           <button className="btn" onClick={fetchPreview} disabled={busy}>
             미리보기

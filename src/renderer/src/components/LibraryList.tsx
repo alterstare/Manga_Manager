@@ -13,8 +13,10 @@ import type { MenuItem } from './ContextMenu'
 import ConfirmModal from './ConfirmModal'
 import Pager from './Pager'
 import SearchClear from './SearchClear'
+import GroupFilterMenu from './GroupFilterMenu'
+import { useTabState } from './useTabState'
 
-const PAGE_SIZE = 40 // hitomi list is paginated (like the online list) to keep the
+const PAGE_SIZE = 40 // doujin list is paginated (like the online list) to keep the
 // DOM small — an unvirtualized full library made the pane-resize reflow stutter.
 
 // Compact, always-visible work list shown on the left while reading. Supports
@@ -26,6 +28,9 @@ export default function LibraryList(): JSX.Element {
   const seed = useStore((s) => s.randomSeed)
   const ignoreBrackets = useStore((s) => s.settings.ignoreBracketTagsInSort)
   const groups = useStore((s) => s.settings.groups)
+  const groupFilter = useStore((s) => s.groupFilter)
+  const showUngrouped = useStore((s) => s.showUngrouped)
+  const hitomiGroups = useMemo(() => groups.filter((g) => (g.mode ?? 'hitomi') === 'hitomi'), [groups])
   const scheme = useStore((s) => s.settings.normalChapterScheme)
   const tabs = useStore((s) => s.tabs)
   const activeTabId = useStore((s) => s.activeTabId)
@@ -40,8 +45,8 @@ export default function LibraryList(): JSX.Element {
   const onlineFavs = useStore((s) => s.onlineFavs)
   const toggleNormalUnifiedFav = useStore((s) => s.toggleNormalUnifiedFav)
 
-  const [input, setInput] = useState('')
-  const [applied, setApplied] = useState('')
+  const [input, setInput] = useTabState('input', '')
+  const [applied, setAppliedRaw] = useTabState('applied', '')
   const [sort] = useState<SortMode>(globalSort)
   const [menu, setMenu] = useState<{ x: number; y: number; id: string } | null>(null)
   const [moveTo, setMoveTo] = useState<{ workId: string; gid: string; name: string } | null>(null)
@@ -51,7 +56,7 @@ export default function LibraryList(): JSX.Element {
   const normalRoots = useSeriesRoots()
   const isNormalActive = !!activeWork && (activeWork.library ?? 'hitomi') === 'normal'
   const flattenRoots = useStore((s) => s.settings.flattenRoots)
-  // If the active hitomi work sits under an "artist folder" (flattenRoots), the
+  // If the active doujin work sits under an "artist folder" (flattenRoots), the
   // left list is locked to just that folder's works (that artist), and continuous
   // reading flows across them automatically.
   const activeArtistFolder = useMemo(
@@ -81,22 +86,28 @@ export default function LibraryList(): JSX.Element {
     if (activeGroup) {
       return applied.trim() ? activeGroup.chapters.filter((w) => matchesSearch(w, applied)) : activeGroup.chapters
     }
-    // Hitomi list must not include general-manga works (separate libraries).
-    const hitomiWorks = works.filter((w) => (w.library ?? 'hitomi') !== 'normal')
+    // Doujin list must not include general-manga works (separate libraries).
+    const libWorks = works.filter((w) => (w.library ?? 'hitomi') !== 'normal')
     // Under an artist folder → lock the list to that folder's works (that artist),
     // regardless of the search/filter box.
     if (activeArtistFolder) {
-      const inFolder = hitomiWorks.filter(
+      const inFolder = libWorks.filter(
         (w) => artistFolderOf(w.path, flattenRoots ?? []) === activeArtistFolder
       )
       return selectWorks(inFolder, '', { kind: 'all' }, sort, seed, ignoreBrackets)
     }
+    // 그룹 분류 (shared with the home screen's filter).
+    const hitomiWorks = libWorks.filter((w) => {
+      const gids = w.groups ?? []
+      if (gids.length === 0) return showUngrouped
+      return gids.some((id) => groupFilter[id] !== false)
+    })
     return selectWorks(hitomiWorks, applied, filter, sort, seed, ignoreBrackets)
-  }, [activeGroup, activeArtistFolder, flattenRoots, works, applied, filter, sort, seed, ignoreBrackets])
+  }, [activeGroup, activeArtistFolder, flattenRoots, works, applied, filter, sort, seed, ignoreBrackets, groupFilter, showUngrouped])
 
   // Publish the current list order as the reading queue so the reader can flow
   // from one work into the next. General manga flows across a series' chapters;
-  // an artist folder flows across that artist's works; a plain hitomi list flows
+  // an artist folder flows across that artist's works; a plain doujin list flows
   // ONLY when it's an artist search — a normal browse shouldn't spill over.
   useEffect(() => {
     const artistSearch = /(^|[\s,])-?artist:/i.test(applied)
@@ -112,12 +123,17 @@ export default function LibraryList(): JSX.Element {
   const readProgress = useStore((s) => s.readProgress)
   const lastId = useMemo(() => lastReadKey(readProgress, infos.map((ci) => ci.work.id)), [readProgress, infos])
 
-  // Paginate the (unvirtualized) hitomi list so only PAGE_SIZE rows are in the
+  // Paginate the (unvirtualized) doujin list so only PAGE_SIZE rows are in the
   // DOM at once — same idea as the online list. The general-manga series list is
   // already short, so it isn't paged.
   const scrollRef = useRef<HTMLDivElement>(null)
-  const [page, setPage] = useState(0)
-  useEffect(() => setPage(0), [applied, filter, sort, seed, activeGroup])
+  const [page, setPage] = useTabState('page', 0)
+  // A new query starts at page 1 (the page is per tab, so switching tabs keeps it).
+  const setApplied = (q: string): void => {
+    setAppliedRaw(q)
+    setPage(0)
+  }
+  useEffect(() => setPage(0), [filter, sort, seed]) // eslint-disable-line react-hooks/exhaustive-deps
   const lastPage = activeGroup ? -1 : Math.max(0, Math.ceil(list.length / PAGE_SIZE) - 1)
   const pageItems = activeGroup ? list : list.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE)
   const goPage = (p: number): void => {
@@ -181,7 +197,7 @@ export default function LibraryList(): JSX.Element {
             <AutoStoriesIcon /> 시리즈 · {list.length}화
             {activeGroup && activeGroup.chapters[0] && (
               <span className="lib-series-actions">
-                {/* Series-level favorite (unified with the online toki favorite of the
+                {/* Series-level favorite (unified with the online manga-site favorite of the
                     same title) + group for every chapter — same as the home card. */}
                 <FavGroup
                   favorite={seriesFav}
@@ -208,6 +224,7 @@ export default function LibraryList(): JSX.Element {
         <button className="mini search-btn" onClick={apply} title="검색">
           <SearchIcon />
         </button>
+        {!activeGroup && !activeArtistFolder && hitomiGroups.length > 0 && <GroupFilterMenu groups={hitomiGroups} />}
       </div>
       {applied && (
         <div className="applied-row">

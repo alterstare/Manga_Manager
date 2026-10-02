@@ -129,7 +129,7 @@ export default function Settings(): JSX.Element {
     nav?.()
   }
 
-  const modeName = ctl.isHitomi ? '히토미' : '일반 만화'
+  const modeName = ctl.isHitomi ? '동인지' : '일반 만화'
   return (
     <SettingsContext.Provider value={ctl}>
       <div className="settings">

@@ -1,4 +1,4 @@
-// Shared runner for every online download (hitomi gallery, toki series, backup
+// Shared runner for every online download (doujin gallery, manga-site series, backup
 // site chapters): concurrency gate, user stop, and progress/error reporting on
 // the renderer's hitomiProgress channel.
 //
@@ -14,8 +14,8 @@ import { store, sendToRenderer } from './context'
 // a stop isn't shown as a failure.
 export const STOP_MSG = 'DOWNLOAD_STOPPED'
 
-// Abort handles of queued/running downloads, keyed by progress code (hitomi
-// code / toki seriesUrl / "backup:<title>").
+// Abort handles of queued/running downloads, keyed by progress code (doujin
+// code / manga-site seriesUrl / "backup:<title>").
 const controllers = new Map<string, AbortController>()
 
 // Concurrency gate (settings · 동시 다운로드). The limit is read on every acquire,
@@ -52,7 +52,7 @@ async function acquireSlot(signal: AbortSignal): Promise<() => void> {
 }
 
 // Report progress for this download. `label` is used as the title when the
-// download has none yet (e.g. hitomi learns the title only once fetching).
+// download has none yet (e.g. doujin learns the title only once fetching).
 export type Report = (
   phase: HitomiProgress['phase'],
   done?: number,

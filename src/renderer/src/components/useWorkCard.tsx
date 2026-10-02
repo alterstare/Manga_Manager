@@ -74,7 +74,7 @@ export function useWorkCard(work: Work): {
     }
   }
 
-  // The heart is the unified favorite: coded hitomi works share it with the
+  // The heart is the unified favorite: coded doujin works share it with the
   // online side (main moves the folder per settings). Cached page urls are
   // dropped because a move changes the work's path.
   const isFav = work.favorite || onlineFav

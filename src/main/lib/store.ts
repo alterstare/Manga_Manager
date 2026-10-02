@@ -11,11 +11,11 @@ import { isUnder } from './favorites'
 // memory; searching/sorting happens in JS. Avoids native sqlite build pain on
 // Windows + Electron. Files live in the app's userData dir.
 
-// Stable id for a work. Coded works key on the globally-unique hitomi id.
+// Stable id for a work. Coded works key on the globally-unique doujin id.
 // Uncoded works hash a basis string: callers pass `uniqueKey` (the full path)
 // for general manga, because chapter folder names repeat across series
 // ("0001 1 - - 1화", "1화") and a name-only hash collides → one chapter silently
-// overwrites another. Hitomi uncoded works pass no uniqueKey so they keep the
+// overwrites another. Doujin uncoded works pass no uniqueKey so they keep the
 // folder-name hash (gallery names are unique, and the id survives a move).
 export function deriveId(folderName: string, code: string | null, uniqueKey?: string): string {
   if (code) return `h:${code}`
@@ -43,7 +43,7 @@ export class Store {
   session: SessionState = { tabs: [], activeTabId: null }
   onlineFavs = new Map<string, OnlineFav>()
   transEdits: Record<string, TransBlock[]> = {}
-  // General-manga chapters (local work id or toki chapter url) → when last
+  // General-manga chapters (local work id or manga-site chapter url) → when last
   // opened. Drives 이어보기 and the "read up to here" mark.
   readProgress: Record<string, ReadProgress> = {}
   private progressTimer: NodeJS.Timeout | null = null
@@ -108,7 +108,7 @@ export class Store {
   // startup): (scanned work, stored predecessor, found inside favoritesDir).
   favoriteRule: ((w: Work, prev: Work | undefined, inFavDir: boolean) => boolean) | null = null
 
-  // Update favorite/rank for an online gallery (hitomi code or toki url); cache
+  // Update favorite/rank for an online gallery (doujin code or manga-site url); cache
   // its display meta on first touch. Un-favorited + unranked entries are dropped.
   // `addedAt` may be given to keep an original favorite time (migration).
   setOnlineFav(

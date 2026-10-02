@@ -5,7 +5,7 @@
 //   paged  — one page, click/keys/wheel to flip
 //   spread — two pages side by side
 // plus fit modes and Ctrl+wheel zoom (anchored at the cursor), page
-// translation overlay, chapter navigation (general manga, local + toki) and
+// translation overlay, chapter navigation (general manga, local + manga-site) and
 // continuous reading into the next/previous work of the left list.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { JSX } from 'react'
@@ -59,8 +59,8 @@ export default function Reader({
   const pagedFlipSide = useStore((s) => s.settings.pagedFlipSide)
   const setTabReader = useStore((s) => s.setTabReader)
   const markRead = useStore((s) => s.markRead)
-  // Which library this pane belongs to (toki online = general-manga). Used to
-  // restore + remember the reader mode separately for hitomi vs general-manga.
+  // Which library this pane belongs to (manga-site online = general-manga). Used to
+  // restore + remember the reader mode separately for doujin vs general-manga.
   const libMode: 'hitomi' | 'normal' = paneOnline
     ? paneOnline.kind === 'toki'
       ? 'normal'
@@ -158,7 +158,7 @@ export default function Reader({
     if (n) replaceTabWork(tabId, side, n.id)
   }
 
-  // Online (toki) chapter navigation: same series' sibling chapters, loaded in
+  // Online (manga-site) chapter navigation: same series' sibling chapters, loaded in
   // place (same tab) via the shared chapter cache. Left pane only.
   const [tokiChs, setTokiChs] = useState<TokiChapter[]>([])
   useEffect(() => {
@@ -453,7 +453,7 @@ export default function Reader({
   const goToPage = useCallback(
     (idx: number): void => {
       // Continuous reading: stepping past the last/first page flows into the next/
-      // previous work. Online (toki) uses its sibling chapters; local works use the
+      // previous work. Online (manga-site) uses its sibling chapters; local works use the
       // reading queue (the filtered left list). Only when a neighbour exists.
       if (idx > images.length - 1) {
         if (online?.kind === 'toki' ? goTokiChapterRef.current(1) : continueReading(tabId, side, 1))
@@ -546,7 +546,7 @@ export default function Reader({
             if (Math.abs(edgeAccum.current) >= EDGE) {
               const dir: 1 | -1 = edgeAccum.current > 0 ? 1 : -1
               edgeAccum.current = 0
-              // Online toki continues by sibling chapter; local by reading queue.
+              // Online manga-site continues by sibling chapter; local by reading queue.
               goTokiChapterRef.current(dir) || useStore.getState().continueReading(tabId, side, dir)
             }
           } else {
@@ -652,7 +652,7 @@ export default function Reader({
     }
   }
 
-  // Download the whole toki series into the local general-manga library.
+  // Download the whole manga-site series into the local general-manga library.
   const downloadToki = async (): Promise<void> => {
     if (!online?.seriesUrl) return
     setDownloading(true)

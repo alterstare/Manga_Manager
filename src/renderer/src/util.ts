@@ -492,7 +492,7 @@ export function groupSeries(works: Work[], roots: string[]): SeriesGroup[] {
   return out
 }
 
-// Which works actually need a thumbnail. Hitomi: every work. General manga: only
+// Which works actually need a thumbnail. Doujin: every work. General manga: only
 // the series representative (chapter 1) — chapters share one cover on the home
 // card, so generating a thumb per chapter is wasteful (thousands vs a handful).
 export function thumbTargetIds(
@@ -543,7 +543,7 @@ export const SORT_LABELS: Record<SortMode, string> = {
 }
 
 // Normalized series-title key used to link a local general-manga series with its
-// online (toki) counterpart — they share no id, only the title. Drops bracketed
+// online (manga-site) counterpart — they share no id, only the title. Drops bracketed
 // groups, punctuation and whitespace, lowercases.
 export function titleKey(s: string): string {
   return (s || '')
@@ -554,12 +554,12 @@ export function titleKey(s: string): string {
 }
 
 // Online favorites live in one map keyed by "code": a numeric gallery id for
-// hitomi, the series URL for toki (general manga). This tells them apart.
+// doujin, the series URL for manga-site (general manga). This tells them apart.
 export function isTokiCode(code: string): boolean {
   return /^https?:/.test(code)
 }
 
-// Is a general-manga series with this title favorited ONLINE (toki)? Local and
+// Is a general-manga series with this title favorited ONLINE (manga-site)? Local and
 // online series share only their title, so this is how a local series card
 // shows a heart set from the online side.
 export function isOnlineTitleFav(onlineFavs: Record<string, OnlineFav>, title: string): boolean {

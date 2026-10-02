@@ -75,7 +75,7 @@ export default function ActivityBar(): JSX.Element | null {
     return () => document.removeEventListener('mousedown', onDown)
   }, [open, toggle])
 
-  // The bar is per-mode: hitomi vs general-manga tasks don't mix.
+  // The bar is per-mode: doujin vs general-manga tasks don't mix.
   const rows: Row[] = [
     ...jobs
       .filter((j) => j.mode === libraryMode)
@@ -290,12 +290,6 @@ export default function ActivityBar(): JSX.Element | null {
               지금 재시작
             </button>
           )}
-          <button className="mini icon" title="전체 일시정지" onClick={() => stopAll(libraryMode)} disabled={!anyActive}>
-            <PauseIcon />
-          </button>
-          <button className="mini icon" title="전체 시작" onClick={() => startAll(libraryMode)} disabled={!anyPaused}>
-            <PlayIcon />
-          </button>
         </span>
         <span className="activity-bar-caret">{open ? '▾' : '▴'}</span>
       </div>

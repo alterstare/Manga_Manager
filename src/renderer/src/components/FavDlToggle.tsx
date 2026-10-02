@@ -37,7 +37,7 @@ export default function FavDlToggle({
   )
 }
 
-// Online favorites views (hitomi + general manga): "아직 안 받은 것만" switch —
+// Online favorites views (doujin + general manga): "아직 안 받은 것만" switch —
 // hides favorites already in the library (the counterpart of the library's
 // "받은 것만"). Shared store flag, so both online views agree.
 export function OnlineOnlyToggle(): JSX.Element {
@@ -64,7 +64,7 @@ export function FavSortSelect({
 }): JSX.Element {
   return (
     <Dropdown<'rank' | 'recent'>
-      className="field sm"
+      chip
       value={value}
       onChange={onChange}
       options={[

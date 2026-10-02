@@ -16,6 +16,7 @@ import { favMeta, tagToken } from '../util'
 import { useFavSummaries } from '../favSummaries'
 import type { OnlineGallery, DownloadItem } from '../store'
 import SearchClear from './SearchClear'
+import { useTabState } from './useTabState'
 
 const SORTS: [OnlineSort, string][] = [
   ['date', '최신'],
@@ -41,14 +42,18 @@ export default function OnlineList(): JSX.Element {
   const toggleUnifiedFav = useStore((s) => s.toggleUnifiedFav)
   const setOnlineRank = useStore((s) => s.setOnlineRank)
   const goBrowse = useStore((s) => s.goBrowse)
-  const source = useStore((s) => s.browseSource)
-  const setBrowseSource = useStore((s) => s.setBrowseSource)
-  const page = useStore((s) => s.browsePage)
-  const setBrowsePage = useStore((s) => s.setBrowsePage)
+  // Starts from the online browse screen's source/page; once this tab searches,
+  // sorts or pages, it keeps its own (per tab — other tabs' lists stay as is).
+  const globalSource = useStore((s) => s.browseSource)
+  const globalPage = useStore((s) => s.browsePage)
+  const [tabSource, setBrowseSource] = useTabState<HitomiListSource | null>('source', null)
+  const [tabPage, setBrowsePage] = useTabState<number | null>('page', null)
+  const source = tabSource ?? globalSource
+  const page = tabPage ?? globalPage
   const tabs = useStore((s) => s.tabs)
   const activeTabId = useStore((s) => s.activeTabId)
 
-  const [input, setInput] = useState('')
+  const [input, setInput] = useTabState('input', '')
   const [items, setItems] = useState<GallerySummary[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)

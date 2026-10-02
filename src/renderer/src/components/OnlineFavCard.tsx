@@ -8,8 +8,10 @@ import TagList from './TagList'
 import { useFavSummaries, getFavSummary } from '../favSummaries'
 import { tagToken, isTokiCode } from '../util'
 import { CheckIcon, PauseIcon, PlayIcon, DownloadIcon, SyncIcon, FavoriteIcon } from './icons'
+import { ArtistLinks } from './ArtistLinks'
+import { useTagMenu } from './useTagMenu'
 
-// A favorite that isn't downloaded yet (hitomi numeric code or toki http url),
+// A favorite that isn't downloaded yet (doujin numeric code or manga-site http url),
 // shown inside the unified favorites grid alongside local work cards. Clicking
 // opens it online; the download button pulls it into the library.
 export default function OnlineFavCard({ fav, layout }: { fav: OnlineFav; layout: 'grid' | 'list' }): JSX.Element {
@@ -26,7 +28,17 @@ export default function OnlineFavCard({ fav, layout }: { fav: OnlineFav; layout:
   const d = useStore((s) => s.downloads.find((x) => x.code === fav.code))
   const favoriteTags = useStore((s) => s.settings.favoriteTags)
   const addSearchToken = useStore((s) => s.addSearchToken)
-  // Stored favorites carry no tags → pull the cached gallery summary (hitomi only).
+  const { openTagMenu, tagMenu } = useTagMenu('online')
+  // Artist names are links like on the local cards: click = search by that
+  // artist, right-click = the usual tag menu.
+  const artistLinks = (a: string): JSX.Element => (
+    <ArtistLinks
+      artist={a}
+      onPick={(x) => addSearchToken(tagToken(`artist:${x}`))}
+      onMenu={(x, e) => openTagMenu(e, tagToken(`artist:${x}`), x)}
+    />
+  )
+  // Stored favorites carry no tags → pull the cached gallery summary (doujin only).
   useFavSummaries(isToki ? [] : [fav.code])
   const tags = (getFavSummary(fav.code)?.tags ?? []).filter((t) => !t.startsWith('language:'))
 
@@ -84,7 +96,12 @@ export default function OnlineFavCard({ fav, layout }: { fav: OnlineFav; layout:
               {fav.pageCount ? `${fav.pageCount}p` : ''}
               {!isToki && `${fav.pageCount ? ' · ' : ''}[${fav.code}]`}
               {fav.language && ` · ${fav.language}`}
-              {fav.artist && ` · ${fav.artist}`}
+              {fav.artist && (
+                <>
+                  {' · '}
+                  {artistLinks(fav.artist)}
+                </>
+              )}
             </div>
             <div className="work-tags" onClick={(e) => e.stopPropagation()}>
               {tags.length > 0 && (
@@ -96,6 +113,7 @@ export default function OnlineFavCard({ fav, layout }: { fav: OnlineFav; layout:
             </div>
           </div>
         </div>
+        {tagMenu}
       </div>
     )
   }
@@ -114,9 +132,14 @@ export default function OnlineFavCard({ fav, layout }: { fav: OnlineFav; layout:
       <div className="gtile-meta">
         {fav.pageCount ? `${fav.pageCount}p` : ''}
         {fav.language && `${fav.pageCount ? ' · ' : ''}${fav.language}`}
-        {isToki && fav.artist && `${fav.pageCount || fav.language ? ' · ' : ''}${fav.artist}`}
+        {isToki && fav.artist && (
+          <>
+            {fav.pageCount || fav.language ? ' · ' : ''}
+            {artistLinks(fav.artist)}
+          </>
+        )}
       </div>
-      {!isToki && <div className="gtile-meta gtile-artist">{fav.artist ?? ''}</div>}
+      {!isToki && <div className="gtile-meta gtile-artist">{fav.artist ? artistLinks(fav.artist) : ''}</div>}
       {/* Always present (flex:1) so the card stretches like the local tiles. */}
       <div className="gtile-tags" onClick={(e) => e.stopPropagation()}>
         {tags.length > 0 && (
@@ -128,6 +151,7 @@ export default function OnlineFavCard({ fav, layout }: { fav: OnlineFav; layout:
           />
         )}
       </div>
+      {tagMenu}
     </div>
   )
 }

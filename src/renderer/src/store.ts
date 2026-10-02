@@ -13,7 +13,7 @@ import { warmThumbs, invalidateThumb } from './thumbs'
 import { convertWorkToWebp } from './convert'
 import { thumbTargetIds, groupSeries, titleKey, seriesRoots, isTokiCode } from './util'
 
-// Merge the active mode's per-mode overrides over the base settings so hitomi and
+// Merge the active mode's per-mode overrides over the base settings so doujin and
 // general-manga keep independent display/reader/sort prefs. The result still
 // carries `perMode`, so it round-trips through saveSettings unchanged.
 function effectiveSettings(s: Settings, mode: 'hitomi' | 'normal'): Settings {
@@ -28,16 +28,16 @@ function effectiveSettings(s: Settings, mode: 'hitomi' | 'normal'): Settings {
 }
 
 export interface OnlineGallery {
-  // For hitomi this is the numeric gallery code; for toki it's the chapter
+  // For doujin this is the numeric gallery code; for manga-site it's the chapter
   // viewer URL (always starts with http, which is how the reader tells them
   // apart). Unique per online tab either way.
   code: string
   title: string
   artist: string | null
-  kind?: 'hitomi' | 'toki' // undefined = hitomi (legacy)
-  seriesUrl?: string // toki: the series page, for the sibling-chapter list
-  chapterLabel?: string // toki: current chapter label ("n화"), shown in the tab title
-  thumb?: string | null // toki: wrapped cover url (hitomi fetches its own)
+  kind?: 'hitomi' | 'toki' // undefined = doujin (legacy)
+  seriesUrl?: string // manga-site: the series page, for the sibling-chapter list
+  chapterLabel?: string // manga-site: current chapter label ("n화"), shown in the tab title
+  thumb?: string | null // manga-site: wrapped cover url (doujin fetches its own)
 }
 
 // Everything needed to (re)start a download. Stored on the DownloadItem so a
@@ -82,8 +82,8 @@ export interface Job {
   endedAt?: number
 }
 
-// A download's library mode is encoded in its code: numeric = hitomi gallery;
-// an http(s) url (toki chapter) or a "backup:" code = general-manga (normal).
+// A download's library mode is encoded in its code: numeric = doujin gallery;
+// an http(s) url (manga-site chapter) or a "backup:" code = general-manga (normal).
 export function downloadMode(code: string): 'hitomi' | 'normal' {
   return isTokiCode(code) || code.startsWith('backup:') ? 'normal' : 'hitomi'
 }
@@ -172,7 +172,7 @@ interface AppState {
   // navigation
   view: View
   manageMode: 'duplicates' | 'translations' | 'merge' | 'collections'
-  // Which library the home/list views show: hitomi galleries or general manga.
+  // Which library the home/list views show: doujin galleries or general manga.
   libraryMode: 'hitomi' | 'normal'
   menuOpen: boolean // ☰ left nav drawer
   // Unsaved-settings guard. Settings marks itself dirty; any attempt to navigate
@@ -232,12 +232,15 @@ interface AppState {
   // name elsewhere (reader header / card). TokiBrowse consumes it on change.
   tokiAuthorSeed: { name: string; nonce: number } | null
   onlineProgress: Record<string, { scrollTop: number; pageIdx: number }>
+  // Reader left-list UI state per tab (search box, query, page) — see useTabState.
+  sideState: Record<string, Record<string, unknown>>
+  setSideState: (tabId: string, key: string, v: unknown) => void
   // General-manga chapter → when last opened (persisted, main progress.json).
   readProgress: Record<string, ReadProgress>
   setReadProgressAll: (p: Record<string, ReadProgress>) => void
   markRead: (key: string) => void
   downloads: DownloadItem[] // active + finished downloads this session (newest first)
-  onlineFavs: Record<string, OnlineFav> // hitomi gallery favorites/ranks by code
+  onlineFavs: Record<string, OnlineFav> // doujin gallery favorites/ranks by code
   jobs: Job[] // background tasks (export/scan) this session, newest first
   activityOpen: boolean // is the activity panel (above the bar) expanded
   update: UpdateStatus | null // auto-update state, shown as a row in the activity bar
@@ -316,7 +319,7 @@ interface AppState {
   replaceTabOnline: (tabId: string, g: OnlineGallery) => void
   openTab: (workId: string) => void
   openOnline: (g: OnlineGallery) => void
-  // Open a toki (general-manga online) chapter, keeping general-manga mode.
+  // Open a manga-site (general-manga online) chapter, keeping general-manga mode.
   openToki: (g: OnlineGallery) => void
   // Open in a background tab: add the tab but stay on the current view/tab.
   openTabBackground: (workId: string) => void
@@ -380,6 +383,8 @@ interface AppState {
   setShowUngrouped: (b: boolean) => void
   createGroup: (name: string) => Promise<string | null>
   deleteGroup: (id: string) => Promise<void>
+  // Rename a group (and its folders on disk). Throws with a Korean message on failure.
+  renameGroup: (id: string, name: string) => Promise<void>
   setSeriesTags: (key: string, tags: string[]) => Promise<void>
   pushDownloadProgress: (p: HitomiProgress) => void
   // Dispatch (or redispatch) a download through the main queue. Records the spec
@@ -405,7 +410,7 @@ interface AppState {
   searchOnline: (query: string) => void
   searchLocal: (query: string) => void
   addFavoriteTag: (tag: string) => void // add a tag/artist to the highlighted set
-  toggleExcludeTag: (token: string) => void // add/remove a hitomi 검색 제외 태그 (search token)
+  toggleExcludeTag: (token: string) => void // add/remove a doujin 검색 제외 태그 (search token)
   setBrowsePage: (p: number) => void
   searchTokiAuthor: (name: string) => void
   setOnlineProgress: (code: string, p: { scrollTop: number; pageIdx: number }) => void
@@ -414,10 +419,10 @@ interface AppState {
   // Unified favorite toggle: flips BOTH the online favorite and (if the gallery is
   // in the local library) the local favorite, so a favorite is one state everywhere.
   toggleUnifiedFav: (code: string, meta?: Partial<OnlineFav>) => Promise<void>
-  // Heart a local work: hitomi-coded works via the favorites list (same as
+  // Heart a local work: doujin-coded works via the favorites list (same as
   // toggleUnifiedFav), others locally.
   setWorkFavorite: (work: Work, fav: boolean) => Promise<void>
-  // General-manga unified favorite: a local series (by key) and its online toki
+  // General-manga unified favorite: a local series (by key) and its online manga-site
   // series (by url) are linked by normalized title and toggled together.
   toggleNormalUnifiedFav: (p: { title: string; localKey?: string; url?: string; meta?: Partial<OnlineFav> }) => Promise<void>
   setOnlineRank: (code: string, rank: number, meta?: Partial<OnlineFav>) => Promise<void>
@@ -437,7 +442,7 @@ const TAB_GROUP_COLORS = ['#4c8dff', '#3ddc84', '#ff9b4d', '#c77dff', '#ff5d8f',
 
 // View state (zoom + mode) a newly opened tab inherits from the last-viewed tab,
 // so prev/next-chapter and list-selected works keep the current look. Reader mode
-// is only inherited within the SAME library (hitomi/normal); across libraries the
+// is only inherited within the SAME library (doujin/normal); across libraries the
 // tab starts unset so the Reader restores that library's own last-used mode.
 function inheritReader(
   st: AppState,
@@ -604,6 +609,7 @@ export const useStore = create<AppState>((set, get) => ({
   browseTopNonce: 0,
   tokiAuthorSeed: null,
   onlineProgress: {},
+  sideState: {},
   readProgress: {},
   downloads: [],
   onlineFavs: {},
@@ -760,7 +766,7 @@ export const useStore = create<AppState>((set, get) => ({
       const active = st.tabs.find((t) => t.id === st.activeTabId)
       // Online tab → back to the online browse; local work → back to the library
       // home. Keep the tab open so it can be reopened. libraryMode already tracks
-      // the tab's mode, so browse renders the right list (hitomi vs 일반 만화).
+      // the tab's mode, so browse renders the right list (doujin vs 일반 만화).
       return active?.online ? { view: 'browse' } : { view: 'home', activeTabId: null }
     }),
   goSettings: () => set({ view: 'settings' }),
@@ -875,7 +881,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   // Same as openOnline but stays in general-manga mode and stamps the tab as
-  // normal, so the reader shows the toki chapter list (not the hitomi browse).
+  // normal, so the reader shows the manga-site chapter list (not the doujin browse).
   openToki: (g) => {
     const existing = get().tabs.find((t) => t.online?.code === g.code)
     if (existing) {
@@ -1175,9 +1181,9 @@ export const useStore = create<AppState>((set, get) => ({
       let view = st.view
       let libraryMode = st.libraryMode
       if (st.activeTabId === tabId) {
-        // Pick the nearest remaining tab of the SAME library mode — hitomi and
+        // Pick the nearest remaining tab of the SAME library mode — doujin and
         // general manga are separate, so closing the last normal tab must not
-        // jump into a hitomi tab (and vice versa). None left → go home in that
+        // jump into a doujin tab (and vice versa). None left → go home in that
         // mode instead of yanking into the other library.
         const sameMode = (t: Tab): boolean => (t.mode ?? 'hitomi') === mode
         const after = tabs.slice(idx).find(sameMode)
@@ -1312,7 +1318,7 @@ export const useStore = create<AppState>((set, get) => ({
     const n = name.trim()
     if (!n) return null
     const id = 'g' + Date.now().toString(36)
-    // Scope the group to the current library mode (hitomi vs general manga).
+    // Scope the group to the current library mode (doujin vs general manga).
     const mode = get().libraryMode
     const s = { ...get().settings, groups: [...get().settings.groups, { id, name: n, mode }] }
     set({ settings: s })
@@ -1337,6 +1343,10 @@ export const useStore = create<AppState>((set, get) => ({
     const s = { ...get().settings, seriesTags }
     set({ settings: s })
     await window.api.saveSettings(s)
+  },
+  renameGroup: async (id, name) => {
+    const { settings, works } = await window.api.renameGroup(id, name)
+    set({ settings, works })
   },
   deleteGroup: async (id) => {
     const { settings, works } = await window.api.deleteGroup(id)
@@ -1412,7 +1422,7 @@ export const useStore = create<AppState>((set, get) => ({
         works = await window.api.tokiDownloadGeneric(spec.title, spec.chapters, spec.only)
       }
       works.forEach((w) => get().addWork(w))
-      // hitomi often ships avif only; if the user picked webp, convert the pages
+      // doujin often ships avif only; if the user picked webp, convert the pages
       // right on THIS download's item (phase 'converting') — one row per work, no
       // separate job. (Pupil compatibility.)
       if (spec.kind === 'hitomi' && get().settings.downloadImageFormat === 'webp') {
@@ -1555,7 +1565,7 @@ export const useStore = create<AppState>((set, get) => ({
         .then(() => endJob(thumbJob, { status: 'done', detail: `${ids.length}개` }))
         .catch((e: any) => endJob(thumbJob, { status: 'error', error: String(e?.message ?? e) }))
     }
-    // Auto-fill hitomi metadata for coded works.
+    // Auto-fill doujin metadata for coded works.
     if (get().settings.autoEnrichOnScan && w.some((x) => x.code && !x.language)) {
       window.api.hitomiEnrichAll().then(() => window.api.getWorks().then((ws) => set({ works: ws })))
     }
@@ -1597,7 +1607,7 @@ export const useStore = create<AppState>((set, get) => ({
     set({ settings: s })
     window.api.saveSettings(s)
   },
-  // Remember the last-used reader mode per library (hitomi/normal) and persist,
+  // Remember the last-used reader mode per library (doujin/normal) and persist,
   // so a freshly opened tab restores that library's preferred view after a
   // restart or navigating home.
   setLastReaderMode: (lib, m) => {
@@ -1635,7 +1645,7 @@ export const useStore = create<AppState>((set, get) => ({
     guardLeave(get, set, () =>
       set({
         view: 'browse',
-        libraryMode: 'hitomi', // online browse is the hitomi gallery index
+        libraryMode: 'hitomi', // online browse is the doujin gallery index
         browsePage: 0,
         browseSource: { kind: 'search', query, language: null, sort: 'date' }
       })
@@ -1672,6 +1682,8 @@ export const useStore = create<AppState>((set, get) => ({
     })),
   setOnlineProgress: (code, p) =>
     set((st) => ({ onlineProgress: { ...st.onlineProgress, [code]: p } })),
+  setSideState: (tabId, key, v) =>
+    set((st) => ({ sideState: { ...st.sideState, [tabId]: { ...st.sideState[tabId], [key]: v } } })),
   setReadProgressAll: (p) => set({ readProgress: p }),
   markRead: (key) => {
     set((st) => ({ readProgress: { ...st.readProgress, [key]: { at: Date.now() } } }))
@@ -1781,7 +1793,7 @@ export function useSeriesRoots(): string[] {
   return useMemo(() => seriesRoots({ normalRoots: roots }), [roots])
 }
 
-// Lookups from hitomi gallery code to the local library, for online views:
+// Lookups from doujin gallery code to the local library, for online views:
 //   libCodes      — codes already in the library (card shows "downloaded")
 //   codeWorkId    — code → local work id (show the local cover thumbnail)
 //   localFavCodes — codes favorited locally (heart is on if favorited in
@@ -1806,7 +1818,7 @@ export function useLibraryCodes(): {
   }, [works])
 }
 
-// Of `keys` (chapter work ids / toki chapter urls), the one read most recently —
+// Of `keys` (chapter work ids / manga-site chapter urls), the one read most recently —
 // "read up to here" in a series list, and where 이어보기 reopens a series.
 export function lastReadKey(progress: Record<string, ReadProgress>, keys: string[]): string | null {
   let best: string | null = null

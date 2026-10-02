@@ -11,7 +11,7 @@ export type HitomiListSource =
   | { kind: 'index'; language: string | null; sort?: OnlineSort }
   | { kind: 'search'; query: string; language: string | null; sort?: SearchSort }
 
-// --- General-manga online (toki-family mirror) ---
+// --- General-manga online (manga-site-family mirror) ---
 export type TokiSort = 'date' | 'new' | 'bookmark' | 'view' | 'rating' | 'chapter'
 export type TokiType = 'manga' | 'webtoon'
 export interface TokiListSource {
@@ -21,7 +21,7 @@ export interface TokiListSource {
   query?: string // free-text search; overrides genre/sort when present
   field?: 'title' | 'author' // which field `query` searches (default title)
 }
-// One series card on a toki list page.
+// One series card on a manga-site list page.
 export interface TokiSummary {
   url: string // series page url (unique id)
   title: string
@@ -62,6 +62,7 @@ export const IPC = {
   setCoverHash: 'works:setCoverHash',
   setWorkGroups: 'works:setGroups',
   deleteGroup: 'works:deleteGroup',
+  renameGroup: 'works:renameGroup',
   hitomiFindKorean: 'hitomi:findKorean',
   exportFavorites: 'fav:export',
   importFavorites: 'fav:import',
@@ -87,6 +88,8 @@ export const IPC = {
   removeManualTag: 'works:removeManualTag',
   incrementView: 'works:incrementView',
   openInExplorer: 'works:openInExplorer',
+  clipboardReadText: 'app:clipboardReadText',
+  clipboardWriteText: 'app:clipboardWriteText',
   deleteWork: 'works:delete',
   mergeSeries: 'works:mergeSeries',
   renameNormalChapters: 'works:renameNormalChapters',
@@ -121,7 +124,7 @@ export const IPC = {
   tokiDownloadGeneric: 'toki:downloadGeneric',
   tokiOpenSite: 'toki:openSite',
   tokiChallenge: 'toki:challenge', // main -> renderer: Cloudflare auth window shown/cleared
-  tokiStatus: 'toki:status', // main -> renderer: what the toki scraper is doing (null = idle)
+  tokiStatus: 'toki:status', // main -> renderer: what the manga-site scraper is doing (null = idle)
   saveThumb: 'thumb:save',
   getThumb: 'thumb:get',
   pickImage: 'dialog:pickImage',
@@ -225,6 +228,7 @@ export interface Api {
   // Delete a group: drops it from settings, moves its works out of the group
   // folder, and strips the group id from those works. Returns fresh state.
   deleteGroup: (groupId: string) => Promise<{ settings: Settings; works: Work[] }>
+  renameGroup: (groupId: string, name: string) => Promise<{ settings: Settings; works: Work[] }>
   hitomiFindKorean: (payload: {
     code: string | null
     artist: string | null
@@ -244,7 +248,7 @@ export interface Api {
   onOnlineFavPreload: (cb: (p: { done: number; total: number }) => void) => () => void
   // Merge 2+ favorite files into one new file (union); no library change.
   mergeFavorites: () => Promise<{ ok: boolean; count: number; files: number; path?: string }>
-  // Online (hitomi) favorites + ranks, keyed by gallery code.
+  // Online (doujin) favorites + ranks, keyed by gallery code.
   getOnlineFavs: () => Promise<OnlineFav[]>
   getReadProgress: () => Promise<Record<string, ReadProgress>>
   markRead: (key: string) => Promise<void>
@@ -253,7 +257,7 @@ export interface Api {
     patch: { favorite?: boolean; rank?: number },
     meta?: Partial<OnlineFav>
   ) => Promise<OnlineFav>
-  // Heart / unheart a hitomi gallery by code: updates the favorites list and
+  // Heart / unheart a doujin gallery by code: updates the favorites list and
   // every local work with that code (moving folders per favoriteMoveToFolder).
   setFavoriteByCode: (
     code: string,
@@ -281,6 +285,8 @@ export interface Api {
   removeManualTag: (workId: string, tag: string) => Promise<Work>
   incrementView: (workId: string) => Promise<Work>
   openInExplorer: (workId: string) => Promise<void>
+  clipboardReadText: () => Promise<string> // for the text-field 붙여넣기 menu
+  clipboardWriteText: (text: string) => Promise<void> // 복사 menus (works even when the window isn't focused)
   deleteWork: (workId: string) => Promise<void>
   // Merge several general-manga works into one series folder (chapters become
   // subfolders of a single <root>/<title> folder). Returns the moved works.
@@ -288,7 +294,7 @@ export interface Api {
   // Rename general-manga chapter folders in place to the given names (the caller
   // computes "<n>화 <subtitle>" per work). Returns the updated works.
   renameNormalChapters: (items: { id: string; name: string }[]) => Promise<Work[]>
-  // Sweep hitomi-coded works that 404 on hitomi (deleted) into settings.deletedDir.
+  // Sweep doujin-coded works that 404 on doujin (deleted) into settings.deletedDir.
   // Returns a summary + the refreshed works. Progress via onClassifyProgress.
   classifyDeleted: () => Promise<{ moved: number; checked: number; uncertain: number; works: Work[] }>
   onClassifyProgress: (
@@ -301,8 +307,8 @@ export interface Api {
   hitomiEnrich: (workId: string) => Promise<Work>
   hitomiEnrichAll: () => Promise<Work[]>
   hitomiCancelEnrich: () => Promise<void>
-  hitomiDownload: (input: string) => Promise<Work> // input = code or hitomi url
-  // Abort a running/queued download by its progress code (hitomi code, toki
+  hitomiDownload: (input: string) => Promise<Work> // input = code or doujin url
+  // Abort a running/queued download by its progress code (doujin code, manga-site
   // seriesUrl, or "backup:<title>"). No-op if that code isn't downloading.
   downloadStop: (code: string) => Promise<boolean>
   onHitomiProgress: (cb: (p: HitomiProgress) => void) => () => void
@@ -314,7 +320,7 @@ export interface Api {
   replaceAvifWithWebp: (avifPath: string, webpBase64: string) => Promise<void>
   hitomiReadUrls: (code: string) => Promise<string[]>
   hitomiRegenCover: (workId: string, code: string) => Promise<{ ok: boolean; error?: string }>
-  // General-manga online (toki-family). Scraped via a hidden BrowserWindow.
+  // General-manga online (manga-site-family). Scraped via a hidden BrowserWindow.
   tokiList: (source: TokiListSource, page: number) => Promise<TokiListResult>
   tokiChapters: (seriesUrl: string) => Promise<TokiChapter[]>
   tokiReadUrls: (chapterUrl: string) => Promise<string[]> // wrapped image urls

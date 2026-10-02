@@ -23,7 +23,7 @@ function rankToken(token: string, term: string): number | null {
 // Search input with a dark, app-styled tag autocomplete. Suggestions complete the
 // LAST whitespace-separated word of the query, so earlier tokens are kept.
 // `tokens` are local (library) suggestions matched synchronously; the optional
-// `fetchTokens` pulls extra suggestions async (e.g. the bundled hitomi artist list
+// `fetchTokens` pulls extra suggestions async (e.g. the bundled doujin artist list
 // + browsed tags) for the online search box.
 export default function TagSearchInput({
   value,
@@ -58,7 +58,7 @@ export default function TagSearchInput({
   const inputRef = useRef<HTMLInputElement>(null)
   const seq = useRef(0)
 
-  // Combos are comma-separated (hitomi's own delimiter); tag VALUES may contain
+  // Combos are comma-separated (the doujin site's own delimiter); tag VALUES may contain
   // spaces ("big breasts"), so split on comma ONLY — never whitespace — and
   // autocomplete the last comma-segment.
   const lastWord = (value.split(',').pop() ?? '').trim()

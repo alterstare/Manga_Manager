@@ -1,13 +1,13 @@
 // Image plumbing between main and renderer:
 //  • the custom `mangaimg://` protocol that serves local files and proxies
-//    remote hitomi/toki images (which need a Referer the renderer can't set),
+//    remote doujin / manga-site images (which need a Referer the renderer can't set),
 //  • url encoders for each source,
 //  • the on-disk thumbnail cache (one small webp per work).
 //
 // URL forms (path segment = base64url of the target):
 //   mangaimg://img/<abs path>     local file
-//   mangaimg://web/<https url>    hitomi image (fetched via the DNS-bypass path)
-//   mangaimg://toki/<https url>   general-manga online image (toki session)
+//   mangaimg://web/<https url>    doujin image (fetched via the DNS-bypass path)
+//   mangaimg://toki/<https url>   general-manga online image (manga-site session)
 import { app, net, protocol } from 'electron'
 import { join } from 'path'
 import { pathToFileURL } from 'url'
@@ -29,13 +29,13 @@ export function encodeImg(path: string): string {
   return 'mangaimg://img/' + b64(path)
 }
 
-// Remote hitomi image → loads through our protocol (main attaches the Referer;
+// Remote doujin image → loads through our protocol (main attaches the Referer;
 // a bare <img> would get a 403).
 export function encodeWeb(url: string): string {
   return 'mangaimg://web/' + b64(url)
 }
 
-// Toki image → fetched through the toki session with the site referer.
+// Manga-site image → fetched through the manga-site session with the site referer.
 export function encodeToki(url: string): string {
   return 'mangaimg://toki/' + b64(url)
 }
@@ -45,7 +45,7 @@ function decodeB64Path(url: string): string {
   return Buffer.from(seg, 'base64url').toString('utf-8')
 }
 
-// Serve the scheme. Image bytes are immutable per URL (hitomi hash / toki path /
+// Serve the scheme. Image bytes are immutable per URL (doujin hash / manga-site path /
 // local file), so responses are marked cacheable: Chromium then caches them,
 // which lets the reader's up-front prefetch (new Image()) warm the cache so the
 // rendered <img> paints instantly instead of re-invoking this handler.

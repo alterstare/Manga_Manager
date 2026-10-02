@@ -10,7 +10,7 @@ export const store = new Store()
 // Lifecycle flags.
 //  closing  — the user confirmed the in-app exit modal; let the window close.
 //  quitting — the app is quitting (quit, relaunch after reset, update install);
-//             every close veto (main window + toki scraper) must stand down.
+//             every close veto (main window + manga-site scraper) must stand down.
 export const appState = { closing: false, quitting: false }
 
 let mainWindow: BrowserWindow | null = null

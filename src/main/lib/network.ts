@@ -1,8 +1,8 @@
 // Network setup, re-applied whenever settings are saved.
 //
-// hitomi's DNS blocking is bypassed inside lib/hitomi.ts itself (DoH +
+// the doujin site's DNS blocking is bypassed inside lib/hitomi.ts itself (DoH +
 // direct-IP connect), so here we only honor an optional user proxy — otherwise
-// 'system', which respects any system-wide VPN/proxy — point the hitomi client
+// 'system', which respects any system-wide VPN/proxy — point the doujin client
 // at the configured content host, and run the optional SNI-bypass tunnel for
 // the general-manga site.
 import { session } from 'electron'
@@ -23,9 +23,9 @@ export async function applyNetwork(s: Settings): Promise<void> {
 // general-manga site gets "ERR_CONNECTION_RESET". green-tunnel is a local HTTP
 // CONNECT proxy that splits the ClientHello into small TLS records / TCP
 // segments (the filter can't reassemble them) and resolves hosts over DoH.
-// It listens on 127.0.0.1 (random port) and ONLY the toki session is pointed
+// It listens on 127.0.0.1 (random port) and ONLY the manga-site session is pointed
 // at it — never the OS proxy setting (a crash would leave every app on the PC
-// pointing at a dead port). hitomi doesn't need it (DNS-only block, handled in
+// pointing at a dead port). doujin doesn't need it (DNS-only block, handled in
 // hitomi.ts).
 let tunnel: Tunnel | null = null
 

@@ -207,7 +207,7 @@ export default function Browse(): JSX.Element {
 
   const lastPage = Math.max(0, Math.ceil(total / pageSize) - 1)
 
-  // "내 즐겨찾기" view: render the persisted online favorites instead of hitomi
+  // "내 즐겨찾기" view: render the persisted online favorites instead of doujin
   // results, sorted by rank or recency.
   // Favorites are stored without tags → fetch their gallery summaries (cached).
   const favCodes = useMemo(() => hitomiFavCodes(onlineFavs), [onlineFavs])
@@ -410,7 +410,7 @@ export default function Browse(): JSX.Element {
         </div>
       )}
 
-      {error && !favMode && <div className="warn err">{error} — hitomi 접속/태그 경로를 확인하세요.</div>}
+      {error && !favMode && <div className="warn err">{error} — 온라인 접속/태그 경로를 확인하세요.</div>}
       {loading && !favMode && <div className="reader-loading">불러오는 중…</div>}
       {favMode && listLoading && <div className="reader-loading">목록 불러오는 중…</div>}
       {favMode && !listLoading && gallery.length === 0 && (

@@ -1,4 +1,4 @@
-// On-disk cache of hitomi gallery summaries (title, thumb, tags…) keyed by
+// On-disk cache of doujin gallery summaries (title, thumb, tags…) keyed by
 // gallery code — userData/onlineSummaries.json. Online favorite lists and the
 // unified favorites view render from it, so a list seen once shows instantly
 // instead of re-fetching every gallery.

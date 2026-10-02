@@ -6,7 +6,7 @@
 //                  list; elements may be numbers, strings, or objects carrying
 //                  id / galleryid / gallery_id / gallery.id.
 
-// Tolerant extractor for hitomi gallery ids (deduped, numeric strings only).
+// Tolerant extractor for doujin gallery ids (deduped, numeric strings only).
 export function parseIds(raw: any): string[] {
   const out: string[] = []
   const pushFrom = (arr: any[]): void => {

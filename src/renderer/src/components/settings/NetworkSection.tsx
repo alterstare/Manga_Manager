@@ -36,7 +36,7 @@ export default function NetworkSection(): JSX.Element {
         </SettingRow>
         {ping && (
           <p className="hint">
-            DoH IP: <b>{ping.dohIp ?? '실패(DoH 차단)'}</b> · ltn.hitomi.la:{' '}
+            DoH IP: <b>{ping.dohIp ?? '실패(DoH 차단)'}</b> · 사이트 연결:{' '}
             <b style={{ color: ping.ltnOk ? 'var(--accent)' : 'var(--danger)' }}>{ping.ltnOk ? 'OK' : '실패'}</b>
             {ping.error && ` (${ping.error})`}
           </p>
@@ -62,7 +62,7 @@ export default function NetworkSection(): JSX.Element {
             <>
               <SettingRow
                 title="온라인 주소 입력"
-                desc="히토미 사이트 주소. 이 주소를 입력해야 온라인 접속(둘러보기·검색·다운로드)이 됩니다."
+                desc="동인지 사이트 주소. 이 주소를 입력해야 온라인 접속(둘러보기·검색·다운로드)이 됩니다."
               />
               <input
                 type="text"

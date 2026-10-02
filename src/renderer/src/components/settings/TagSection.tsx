@@ -1,6 +1,6 @@
 // 태그·검색: favorite (highlighted) tags, online exclude tags, search history,
 // favorite searches, and folder-name → genre tag rules (with optional move).
-// Plus the 즐겨찾기 box (hitomi): favorites folder, lists, and file.
+// Plus the 즐겨찾기 box (doujin): favorites folder, lists, and file.
 import { useMemo, useState } from 'react'
 import type { JSX } from 'react'
 import type { GenreRule } from '../../../../shared/types'
@@ -101,7 +101,7 @@ function GenreRules({ tokens }: { tokens: string[] }): JSX.Element {
   )
 }
 
-// 즐겨찾기 (hitomi): the favorites folder and whether hearting moves works
+// 즐겨찾기 (doujin): the favorites folder and whether hearting moves works
 // into it, imported favorite lists (gallery codes), and the favorites file.
 // The hearts themselves are one list shared by the library and online views.
 function Favorites(): JSX.Element {
@@ -148,7 +148,7 @@ function Favorites(): JSX.Element {
       <div className="set-block">
         <SettingRow
           title="즐겨찾기 목록"
-          desc="Pupil 호환(hitomi 번호 JSON) 파일을 이름 붙은 목록으로 추가합니다. 온라인에서는 목록 전체를, 라이브러리에서는 받은 작품을 ♥ 옆 ▾에서 골라 볼 수 있습니다."
+          desc="Pupil 호환(작품 번호 JSON) 파일을 이름 붙은 목록으로 추가합니다. 온라인에서는 목록 전체를, 라이브러리에서는 받은 작품을 ♥ 옆 ▾에서 골라 볼 수 있습니다."
         >
           <button
             className="mini"

@@ -1,4 +1,4 @@
-// Folder-name pattern shared by hitomi detection (parser) and download naming.
+// Folder-name pattern shared by doujin detection (parser) and download naming.
 // Tokens: -id- -title- -artist- -group- -language-. Both the main process (to
 // name a downloaded folder) and the renderer (to preview an example) fill a
 // pattern with the same logic, so it lives in shared.
@@ -22,7 +22,7 @@ export function fillNamePattern(pattern: string, f: NameFields): string {
     .trim()
 }
 
-// hitomi language strings (lowercase english) → short display codes.
+// doujin language strings (lowercase english) → short display codes.
 const LANG_CODE: Record<string, string> = {
   korean: 'KOR',
   chinese: 'CHN',

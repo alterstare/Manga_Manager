@@ -1,7 +1,7 @@
 // IPC: the local library — settings, scanning, works (favorite / rank / groups /
 // tags / views), folder operations, session, thumbnails, exports and the app
 // exit/reset flow.
-import { app, ipcMain, dialog, shell, nativeTheme } from 'electron'
+import { app, ipcMain, dialog, shell, nativeTheme, clipboard } from 'electron'
 import { join, resolve, sep, basename, dirname } from 'path'
 import { promises as fs } from 'fs'
 import type { Settings, SessionState, Work } from '../../shared/types'
@@ -10,7 +10,7 @@ import { IPC } from '../../shared/ipc'
 import { store, appState, getMainWindow, sendToRenderer } from '../context'
 import { scanLibrary, scanRoot, listImages, normalRoots } from '../lib/scanner'
 import { parseName } from '../lib/parser'
-import { setGroupFolder, mergeSeries, moveWorkToFolder } from '../lib/favorites'
+import { setGroupFolder, mergeSeries, moveWorkToFolder, renameGroupFolders, safeName } from '../lib/favorites'
 import { setWorkFavorite } from '../lib/favoriteSync'
 import { organizeByLanguage } from '../lib/organize'
 import { translateImage, translateTexts } from '../lib/translate'
@@ -135,7 +135,7 @@ export function registerLibraryIpc(): void {
     return files.map(encodeImg)
   })
 
-  // Heart a local work. Coded hitomi works go through the favorites list
+  // Heart a local work. Coded doujin works go through the favorites list
   // (shared with the online side); see lib/favoriteSync.ts.
   ipcMain.handle(IPC.setFavorite, (_e, workId: string, fav: boolean) => setWorkFavorite(workId, fav))
 
@@ -169,6 +169,42 @@ export function registerLibraryIpc(): void {
     return updated
   })
 
+  // Rename a group: rename its folders on disk (see renameGroupFolders), move
+  // every stored path under them, then save the new name.
+  ipcMain.handle(IPC.renameGroup, async (_e, groupId: string, name: string) => {
+    const g = store.settings.groups.find((x) => x.id === groupId)
+    if (!g) throw new Error('그룹을 찾을 수 없습니다')
+    const n = name.trim()
+    if (!n) throw new Error('그룹 이름을 입력하세요')
+    const mode = g.mode ?? 'hitomi'
+    const key = safeName(n).toLowerCase()
+    if (store.settings.groups.some((x) => x.id !== groupId && (x.mode ?? 'hitomi') === mode && safeName(x.name).toLowerCase() === key))
+      throw new Error('같은 이름의 그룹이 이미 있습니다')
+    const members = allWorks().filter((w) => (w.groups ?? []).includes(groupId))
+    const moved = await renameGroupFolders(members, g.name, n)
+    if (moved.size) {
+      const remap = (p: string | null | undefined): string | null | undefined => {
+        if (!p) return p
+        for (const [from, to] of moved) {
+          if (p === from) return to
+          if (p.startsWith(from + sep)) return to + p.slice(from.length)
+        }
+        return p
+      }
+      for (const w of allWorks()) {
+        const path = remap(w.path) as string
+        const homePath = remap(w.homePath) ?? null
+        if (path !== w.path || homePath !== w.homePath) store.update(w.id, { path, homePath })
+      }
+    }
+    const settings = await store.saveSettings({
+      ...store.settings,
+      groups: store.settings.groups.map((x) => (x.id === groupId ? { ...x, name: n } : x))
+    })
+    await store.flushWorks()
+    return { settings, works: allWorks() }
+  })
+
   // Delete a group: move every member out of the group folder, strip the id
   // from those works, and remove the group from settings.
   ipcMain.handle(IPC.deleteGroup, async (_e, groupId: string) => {
@@ -190,7 +226,7 @@ export function registerLibraryIpc(): void {
   })
 
   // Manual tags. A tag prefixed "language:" / "artist:" sets that field instead
-  // (shown like hitomi's language/artist — mainly for general-manga works).
+  // (shown like doujin works' language/artist — mainly for general-manga works).
   ipcMain.handle(IPC.addManualTag, (_e, workId: string, tag: string) => {
     const w = store.get(workId)!
     const raw = tag.trim()
@@ -212,6 +248,10 @@ export function registerLibraryIpc(): void {
   })
 
   // ---------- folders on disk ----------
+
+  // Clipboard text for the renderer's 붙여넣기 menu (no permission prompt needed).
+  ipcMain.handle(IPC.clipboardReadText, () => clipboard.readText())
+  ipcMain.handle(IPC.clipboardWriteText, (_e, text: string) => clipboard.writeText(String(text ?? '')))
 
   ipcMain.handle(IPC.openInExplorer, (_e, workId: string) => {
     const w = store.get(workId)

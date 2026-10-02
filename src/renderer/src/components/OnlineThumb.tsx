@@ -3,7 +3,7 @@ import type { JSX, ReactNode } from 'react'
 import { useHoverPreview, useWorkThumb } from './Thumb'
 
 // Online-card thumbnail with the same hover-to-peek preview as the local Thumb.
-// The page list comes from `getImgs` (hitomi = direct; toki = series → first
+// The page list comes from `getImgs` (doujin = direct; manga-site = series → first
 // chapter), fetched lazily on hover. `children` (e.g. the download progress
 // bar) render over the thumbnail.
 export default function OnlineThumb({

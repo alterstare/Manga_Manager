@@ -171,7 +171,7 @@ async function scanCoverHashes(
 function Duplicates(): JSX.Element {
   const allWorks = useStore((s) => s.works)
   const libraryMode = useStore((s) => s.libraryMode)
-  // Only dedupe within the current library mode — hitomi and general manga are
+  // Only dedupe within the current library mode — doujin and general manga are
   // separate collections and must not appear mixed here.
   const works = useMemo(
     () => allWorks.filter((w) => (w.library ?? 'hitomi') === libraryMode),
@@ -534,7 +534,7 @@ function Collections(): JSX.Element {
         직접 폴더를 골라 합칠 수 있습니다. 실제 파일은 옮기지 않고 보기에서만 묶습니다.
       </p>
       {roots.length === 0 && (
-        <div className="empty">설정 → 히토미 → “작가 폴더”에서 폴더를 먼저 지정하세요.</div>
+        <div className="empty">설정 → 동인지 → “작가 폴더”에서 폴더를 먼저 지정하세요.</div>
       )}
 
       {collections.length > 0 && (

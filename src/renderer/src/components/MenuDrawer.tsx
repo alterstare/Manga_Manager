@@ -3,7 +3,7 @@ import { useStore } from '../store'
 import { HomeIcon, LanguageIcon, MenuIcon, SettingsIcon, DownloadIcon, FavoriteIcon, AssignmentIcon, HistoryIcon, CompareArrowsIcon } from './icons'
 
 // Left slide-in navigation drawer (☰). Surfaces every screen plus the
-// hitomi ⇄ general-manga mode toggle. Existing tab-bar buttons still work; this
+// doujin ⇄ general-manga mode toggle. Existing tab-bar buttons still work; this
 // is an additional, consolidated entry point. Width is narrow and the rest of
 // the window stays visible behind a transparent click-catcher that closes it.
 function Item({
@@ -58,7 +58,7 @@ export default function MenuDrawer(): JSX.Element {
 
   const normal = libraryMode === 'normal'
   // Both modes route to the browse view; App renders TokiBrowse in normal mode,
-  // hitomi Browse otherwise.
+  // doujin Browse otherwise.
   const onlineClick = (): void => go(goBrowse)
 
   return (
@@ -77,9 +77,9 @@ export default function MenuDrawer(): JSX.Element {
           onClick={() => go(() => setLibraryMode(normal ? 'hitomi' : 'normal'))}
         >
           <span className="menu-item-ico"><CompareArrowsIcon /></span>
-          {normal ? '히토미 뷰어로 전환' : '일반 만화 뷰어로 전환'}
+          {normal ? '동인지 뷰어로 전환' : '일반 만화 뷰어로 전환'}
         </button>
-        <div className="menu-mode-cur">현재: {normal ? '일반 만화' : '히토미'}</div>
+        <div className="menu-mode-cur">현재: {normal ? '일반 만화' : '동인지'}</div>
 
         <div className="menu-sep" />
         <Item icon={<HomeIcon />} label="라이브러리" active={view === 'home'} onClick={libraryClick} />

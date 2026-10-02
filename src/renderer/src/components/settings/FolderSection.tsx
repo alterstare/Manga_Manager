@@ -1,4 +1,4 @@
-// 폴더·저장: library roots, download/language/export folders, and the hitomi
+// 폴더·저장: library roots, download/language/export folders, and the doujin
 // download folder-name patterns. Also exports the folder rows reused by other
 // sections (download, translation). The favorites folder lives in the 즐겨찾기
 // box (TagSection).

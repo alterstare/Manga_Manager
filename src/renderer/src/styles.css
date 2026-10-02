@@ -12,6 +12,7 @@
   --line: #dedee5; /* divider borders */
   --text: #101114; /* near black */
   --text-dim: #686b82; /* cool gray secondary text */
+  --text-hover: #000000; /* hover: text goes a step darker (light theme) */
   --muted: #9497a9; /* silver blue, muted */
   --accent: #7132f5; /* Kraken Purple — primary CTA, links, brand */
   --accent-2: #5741d8; /* darker purple — borders, secondary accents */
@@ -51,6 +52,7 @@
   --line: #2b3040;
   --text: #eceef4;
   --text-dim: #9aa0b2;
+  --text-hover: #ffffff; /* hover: text goes a step brighter (dark theme) */
   --muted: #6f7484;
   --accent: #8b5cf6; /* slightly brighter purple for contrast on dark */
   --accent-2: #7132f5;
@@ -187,6 +189,7 @@ img {
 /* Nav buttons: inactive keeps the subtle raised button fill (bg-2, slightly off
    the bar); active uses the emphasized tab fill for a clear brightness difference. */
 .menu-btn,
+.mode-tab,
 .home-tab,
 .icon-tab {
   background: var(--bg-2);
@@ -201,7 +204,7 @@ img {
 .menu-btn,
 .home-tab,
 .icon-tab {
-  transition: box-shadow 0.1s ease;
+  transition: box-shadow 0.1s ease, background-color 0.12s ease-out, color 0.12s ease-out;
 }
 .tabbar > .tab:active {
   box-shadow: inset 0 0 0 999px var(--press-veil);
@@ -791,7 +794,6 @@ select {
 }
 .stepper-btn:hover:not(:disabled) {
   background: var(--bg-2);
-  color: var(--accent);
 }
 .stepper-btn:disabled {
   opacity: 0.35;
@@ -919,7 +921,6 @@ select {
   box-sizing: border-box;
 }
 .tag:hover {
-  color: var(--accent);
   border-color: var(--accent);
   background: var(--accent-soft);
 }
@@ -1389,8 +1390,10 @@ input[type='checkbox']:checked::after {
 .tooltip {
   position: fixed;
   z-index: 9999;
-  transform: translateX(-50%);
+  /* Natural width up to 280px (positioned in JS, so an edge never squeezes it). */
+  width: max-content;
   max-width: 280px;
+  word-break: keep-all;
   padding: 6px 10px;
   border: 1px solid var(--line);
   border-radius: var(--r2);
@@ -1401,7 +1404,7 @@ input[type='checkbox']:checked::after {
   box-shadow: var(--shadow-subtle);
   pointer-events: none;
   white-space: normal;
-  word-break: break-word;
+  overflow-wrap: break-word;
 }
 /* Fixed-width provider dropdown (sized to the widest option, OpenRouter). */
 .dropdown.prov-field {
@@ -1918,7 +1921,6 @@ body.resizing {
 .menu-item:hover {
   background: var(--accent-soft);
   border-color: var(--accent);
-  color: var(--accent);
 }
 .menu-item.active {
   background: var(--bg-3);
@@ -2255,7 +2257,6 @@ body.resizing {
   text-overflow: ellipsis;
 }
 .chip-mini:hover {
-  color: var(--accent);
   border-color: var(--accent);
   background: var(--accent-soft);
 }
@@ -2800,7 +2801,6 @@ body.resizing {
 }
 .seg .seg-heart:hover,
 .seg .seg-dl:hover {
-  color: var(--accent);
   background: var(--accent-soft);
 }
 .seg .seg-heart.on {
@@ -2948,7 +2948,6 @@ button:active,
 }
 .seg .grp-btn:hover,
 .seg .grp-btn.on {
-  color: var(--accent);
   background: var(--accent-soft);
 }
 .grp-btn {
@@ -2966,7 +2965,6 @@ button:active,
 }
 .grp-btn:hover,
 .grp-btn.on {
-  color: var(--accent);
   background: var(--accent-soft);
   border-color: var(--accent);
 }
@@ -2990,11 +2988,13 @@ button:active,
 }
 .grp-row-x {
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
   cursor: pointer;
   color: var(--text-dim);
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1;
-  padding: 0 2px;
+  padding: 2px;
   border-radius: var(--r2);
 }
 .grp-row-x:hover {
@@ -3061,7 +3061,6 @@ button:active,
   cursor: pointer;
 }
 .copyable:hover {
-  color: var(--accent);
 }
 
 /* ---------- Translation overlay ---------- */
@@ -3970,7 +3969,7 @@ button:active,
   font-weight: 600;
 }
 
-/* --- general-manga online (toki) --- */
+/* --- general-manga online (manga-site) --- */
 .genre-chips {
   display: flex;
   flex-wrap: wrap;
@@ -3992,7 +3991,7 @@ button:active,
   border-radius: inherit;
 }
 
-/* --- online list quick-download (hitomi) --- */
+/* --- online list quick-download (doujin) --- */
 /* Keep the rating on the left and the download+heart pinned to the right, so
    the action icons never drift a slot left when the star widths differ. */
 .lib-foot-actions {
@@ -4011,7 +4010,6 @@ button:active,
   font-variant-numeric: tabular-nums;
 }
 .lib-dl:hover {
-  color: var(--accent);
 }
 .lib-dl.ok {
   color: var(--ok, var(--success));
@@ -4087,10 +4085,9 @@ button:active,
 }
 .gcard-dl:hover {
   border-color: var(--accent-2);
-  color: var(--accent);
 }
 
-/* --- download modal (toki) --- */
+/* --- download modal (manga-site) --- */
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -4206,7 +4203,6 @@ button:active,
 /* ===== Unified purple interaction highlights ===== */
 /* Small buttons: fill with subtle purple + purple text/border (like the group button). */
 .mini:hover {
-  color: var(--accent);
   border-color: var(--accent);
   background: var(--accent-soft);
 }
@@ -4246,30 +4242,24 @@ select:focus,
 /* Chips (inactive): purple outline + text. */
 .chip:hover:not(.active):not(:disabled) {
   border-color: var(--accent);
-  color: var(--accent);
 }
 /* Segmented halves: hover tints purple (heart keeps its red on-state). */
 .seg .seg-heart:hover {
-  color: var(--accent);
 }
 
 /* ===== Purple highlights: menu drawer, dropdown/drawer lists ===== */
 .menu-close:hover {
   background: var(--accent-soft);
-  color: var(--accent);
 }
 .tab.menu-btn:hover {
   background: var(--accent-soft);
-  color: var(--accent);
 }
 /* Custom dropdown option rows. */
 .dropdown-opt:hover {
   background: var(--accent-soft);
-  color: var(--accent);
 }
 /* Drawer checkbox lists (favorites lists, 작품/언어/그룹 분류 panels). */
 .cat-panel label:hover {
-  color: var(--accent);
 }
 /* Settings text inputs: purple border on focus (override the .settings input rule). */
 .settings input:focus,
@@ -4446,7 +4436,6 @@ select:focus,
 }
 .path-item .mini:hover {
   background: transparent;
-  color: var(--accent);
 }
 .path-item .mini.danger:hover {
   color: var(--danger);
@@ -4900,4 +4889,522 @@ select:focus,
   font-size: 12px;
   color: var(--text-dim);
   margin-left: 4px;
+}
+
+/* ===== Toolbar row under the search box (.chips) =====
+   Flat, menu-drawer style: inactive buttons blend into the page background
+   (no fill, no outline) and are separated by short vertical dividers; the
+   button shape appears on hover (purple tint + outline, like .menu-item) and
+   the selected one keeps its purple fill. Press veil / hover rules unchanged. */
+.chips {
+  gap: 0;
+  row-gap: 8px;
+}
+.chips > * + * {
+  position: relative;
+  margin-left: 17px;
+}
+.chips > * + *::before {
+  content: '';
+  position: absolute;
+  left: -9px;
+  top: 50%;
+  width: 1px;
+  height: 16px;
+  margin-top: -8px;
+  background: var(--line);
+  pointer-events: none;
+}
+.chips .chip:not(.active) {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-dim); /* hover steps up to --text-hover */
+}
+.chips .chip:hover:not(.active):not(:disabled) {
+  background: var(--accent-soft);
+}
+
+/* Genre chips: the selected genre is outlined in purple over the page
+   background instead of a filled chip. */
+.genre-chips .tag.fav-tag {
+  background: transparent;
+  color: var(--accent);
+  border-color: var(--accent);
+}
+/* Chip-style Dropdown (e.g. 즐겨찾기 정렬): panel at least as wide as its options. */
+.dropdown:has(> .chip) .dropdown-panel {
+  right: auto;
+  min-width: 100%;
+  white-space: nowrap;
+}
+
+/* ===== List-view card action row (.work-actions: 메타 채우기 · 폴더 열기 …) =====
+   Same flat look as the toolbar row: no fill/outline until hovered, short
+   dividers between items; toggles that are open (.on) keep their filled look,
+   and hover / press / delete-red feedback stay as before. */
+.work-actions {
+  gap: 0;
+  row-gap: 6px;
+}
+.work-actions > * + * {
+  position: relative;
+  margin-left: 13px;
+}
+.work-actions > * + *::before {
+  content: '';
+  position: absolute;
+  left: -7px;
+  top: 50%;
+  width: 1px;
+  height: 14px;
+  margin-top: -7px;
+  background: var(--line);
+  pointer-events: none;
+}
+.work-actions .mini:not(.on) {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-dim); /* hover steps up to --text-hover */
+}
+.work-actions .mini:not(.on):hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.work-actions .mini.danger:not(.on):hover {
+  color: #fff;
+  background: var(--danger);
+  border-color: transparent;
+}
+.work-actions .mini:not(.on):active {
+  background: var(--accent);
+  border-color: transparent;
+  color: #fff;
+}
+.mini > .dt {
+  margin-left: 6px;
+}
+/* Active search-token chips (tag search): purple outline over the page
+   background, like the selected genre chip — not a solid purple fill. Hover
+   tints them (click removes the token). */
+.search-chips .chip.search-tok {
+  background: transparent;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.search-chips .chip.search-tok:hover {
+  background: var(--accent-soft);
+}
+
+/* 전체 선택 / 전체 선택 해제 row at the top of a classification panel. */
+.cat-panel-actions {
+  display: flex;
+  gap: 6px;
+  padding: 2px 2px 6px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* Reader left list: 그룹 ▾ next to the search button; panel opens leftward. */
+.grp-filter {
+  flex-shrink: 0;
+}
+.grp-filter .cat-panel {
+  left: auto;
+  right: 0;
+}
+
+/* 그룹 분류 rows: ✎ rename button (shows on row hover) + in-place name input. */
+.grp-row-edit {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-dim);
+  font-size: 14px;
+  padding: 2px;
+  margin-left: -4px; /* sit right next to the name */
+  border-radius: var(--r3);
+  opacity: 0;
+  cursor: pointer;
+}
+.grp-row:hover .grp-row-edit {
+  opacity: 1;
+}
+.grp-row-edit:hover {
+  background: var(--accent-soft);
+}
+.grp-rename {
+  flex: 1;
+  min-width: 120px;
+  height: 24px;
+  padding: 0 8px;
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: var(--r3);
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+}
+
+/* 그룹 분류 panel: only as wide as the 전체 선택 / 전체 선택 해제 row — the
+   other rows don't widen it (long names ellipsize). Name + edit icon sit
+   together on the left; count + × go to the right end. */
+.grp-panel {
+  width: max-content;
+  white-space: normal;
+}
+.grp-panel > :not(.cat-panel-actions) {
+  width: 0;
+  min-width: 100%;
+}
+.grp-panel .grp-row-name {
+  flex: 0 1 auto;
+}
+.grp-panel .grp-row-count {
+  margin-left: auto;
+}
+
+/* 그룹 생성 (+) button: square icon button next to the name input. */
+.grp-create .mini.icon {
+  width: 28px;
+  padding: 0;
+  font-size: 16px;
+}
+
+/* 전체 선택 | 전체 선택 해제: flat like the toolbar row — no outline until
+   hovered, a short divider between them. */
+.cat-panel-actions {
+  gap: 0;
+}
+.cat-panel-actions .mini {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-dim); /* hover steps up to --text-hover */
+}
+.cat-panel-actions .mini + .mini {
+  position: relative;
+  margin-left: 11px;
+}
+.cat-panel-actions .mini + .mini::before {
+  content: '';
+  position: absolute;
+  left: -6px;
+  top: 50%;
+  width: 1px;
+  height: 14px;
+  margin-top: -7px;
+  background: var(--line);
+  pointer-events: none;
+}
+.cat-panel-actions .mini:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* New-group field: the + button sits inside the input box at its right end,
+   split off by a short divider. */
+.grp-panel .grp-create {
+  gap: 0;
+  border-top: none;
+  padding: 0;
+  margin-top: 2px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r4);
+  overflow: hidden;
+}
+.grp-panel .grp-create:focus-within {
+  border-color: var(--accent);
+}
+.grp-panel .grp-create input {
+  border: none;
+  background: transparent;
+  outline: none;
+}
+.grp-panel .grp-create .mini.icon {
+  position: relative;
+  flex: 0 0 auto;
+  height: 28px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-dim);
+}
+.grp-panel .grp-create .mini.icon::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 7px;
+  bottom: 7px;
+  width: 1px;
+  background: var(--line);
+}
+.grp-panel .grp-create .mini.icon:hover {
+  background: var(--accent-soft);
+}
+
+/* Mode switch button in the tab bar (between ☰ and 홈): icon only, same
+   size as the 홈/온라인 buttons. */
+.tab.mode-tab {
+  flex: 0 0 auto;
+  width: 40px;
+  padding: 0;
+  justify-content: center;
+  transition: box-shadow 0.1s ease, background-color 0.12s ease-out, color 0.12s ease-out;
+}
+.tab.mode-tab:hover {
+  background: var(--accent-soft);
+}
+
+/* Hover never recolors text/icons purple (user preference) — the purple
+   tint/outline is the feedback. Elements whose ONLY hover cue was the text
+   color get a soft purple background (or underline) instead. */
+.copyable:hover {
+  text-decoration: underline;
+}
+.lib-dl:hover,
+.seg .seg-heart:hover,
+.path-item .mini:hover {
+  background: var(--accent-soft);
+}
+.cat-panel label:hover {
+  background: var(--accent-soft);
+  border-radius: var(--r3);
+}
+
+/* Hover text: a monochrome step (brighter on dark, darker on light) instead
+   of purple — together with the purple tint/outline above. */
+.stepper-btn:hover:not(:disabled),
+.tag:hover,
+.menu-item:hover,
+.chip-mini:hover,
+.seg .seg-dl:hover,
+.lib-dl:hover,
+.gcard-dl:hover,
+.mini:hover,
+.chip:hover:not(.active):not(:disabled),
+.seg .seg-heart:hover,
+.menu-close:hover,
+.tab.menu-btn:hover,
+.dropdown-opt:hover,
+.cat-panel label:hover,
+.path-item .mini:hover,
+.work-actions .mini:not(.on):hover,
+.grp-row-edit:hover,
+.cat-panel-actions .mini:hover,
+.grp-panel .grp-create .mini.icon:hover,
+.tab.mode-tab:hover,
+.copyable:hover {
+  color: var(--text-hover);
+}
+
+/* Chrome-like hover easing: colors / fills / outlines fade over 120 ms instead
+   of snapping (short enough not to feel slow). :where() keeps specificity 0,
+   so any element with its own transition (tabs, toggles, carets…) keeps it.
+   box-shadow is left out so the press veil stays instant. */
+:where(
+    button,
+    .chip,
+    .mini,
+    .tag,
+    .chip-mini,
+    .menu-item,
+    .menu-mode,
+    .menu-close,
+    .dropdown-opt,
+    .dropdown-btn,
+    .export-opt,
+    .cat-panel label,
+    .grp-row-edit,
+    .grp-row-x,
+    .copyable,
+    .lib-dl,
+    .gcard-dl,
+    .stepper-btn,
+    .fav-caret,
+    .fav-label,
+    .seg-heart,
+    .seg-dl,
+    .ch-heart,
+    .chapter-row,
+    .lib-item,
+    .work-card,
+    .gtile,
+    .gcard
+  ) {
+  transition:
+    background-color 0.12s ease-out,
+    border-color 0.12s ease-out,
+    color 0.12s ease-out;
+}
+
+/* Popups (dropdowns, category panels, context menus, autocomplete, export /
+   download menus, modals): a quick fade + slide on open, like the hover
+   easing — ~120 ms, never feels slow. Uses the individual `translate` / `scale`
+   properties so any `transform` a popup uses for positioning is untouched.
+   (The menu drawer and the reader's list pane already animate.) */
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    translate: 0 -4px;
+  }
+}
+@keyframes pop-in-up {
+  from {
+    opacity: 0;
+    translate: 0 4px;
+  }
+}
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    scale: 0.97;
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+.cat-panel,
+.dropdown-panel,
+.ctx-menu,
+.ctx-submenu,
+.export-menu,
+.grp-pop,
+.search-ac-list,
+.dl-menu {
+  animation: pop-in 0.12s ease-out;
+}
+.activity-panel {
+  animation: pop-in-up 0.12s ease-out;
+}
+.modal {
+  animation: modal-in 0.14s ease-out;
+}
+.modal-overlay {
+  animation: fade-in 0.12s ease-out;
+}
+
+/* Close: the ghost left by exitAnimations.ts fades/slides back out (same
+   distance and a touch quicker than opening). */
+@keyframes pop-out {
+  to {
+    opacity: 0;
+    translate: 0 -4px;
+  }
+}
+@keyframes pop-out-down {
+  to {
+    opacity: 0;
+    translate: 0 4px;
+  }
+}
+@keyframes modal-out {
+  to {
+    opacity: 0;
+    scale: 0.97;
+  }
+}
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+.pop-closing {
+  pointer-events: none;
+  animation: pop-out 0.1s ease-in forwards;
+}
+.activity-panel.pop-closing {
+  animation: pop-out-down 0.1s ease-in forwards;
+}
+.modal-overlay.pop-closing {
+  animation: fade-out 0.12s ease-in forwards;
+}
+.modal-overlay.pop-closing .modal {
+  animation: modal-out 0.12s ease-in forwards;
+}
+
+/* Segmented card buttons (즐겨찾기 | 다운로드, 즐겨찾기 | 그룹 추가): no outer
+   frame or fill — just the inset divider between the halves; each half still
+   tints on hover. */
+.seg {
+  border-color: transparent;
+  background: transparent;
+}
+
+/* 일반 만화 online genre chips: flat like the toolbar row — no fill/outline,
+   short dividers between; hover tints, the selected genre keeps its purple
+   outline and an excluded one its red strike-through. */
+.genre-chips {
+  gap: 0;
+  row-gap: 6px;
+}
+.genre-chips > * + * {
+  position: relative;
+  margin-left: 11px;
+}
+.genre-chips > * + *::before {
+  content: '';
+  position: absolute;
+  left: -6px;
+  top: 50%;
+  width: 1px;
+  height: 12px;
+  margin-top: -6px;
+  background: var(--line);
+  pointer-events: none;
+}
+.genre-chips .tag:not(.fav-tag):not(.excluded) {
+  background: transparent;
+  border-color: transparent;
+}
+.genre-chips .tag:not(.fav-tag):not(.excluded):hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+/* Heart buttons: the heart's visual mass sits high in its box, so it looked
+   above center — nudge the glyph down (heart buttons + the 즐겨찾기 chip under the search box).
+   Sub-pixel on purpose: the SVG is re-rasterized at the offset (no bitmap blur),
+   so a fraction of a pixel is a real, visible shift. Tune here. */
+.seg-heart .fav-heart,
+.ch-heart .fav-heart,
+.fav-heart.fav-ico {
+  translate: 0 0.8px;
+}
+
+/* ★ glyphs sit low in their line box (font baseline), so a rating row looked
+   below the heart / ＋ buttons beside it. Lift by ~1.8px at 16px — in em so
+   the smaller star sizes (lists, chapter rows) scale with it. */
+.stars {
+  position: relative;
+  top: -0.11em;
+}
+
+/* Card body follows the lifted rating/heart row: title (and the meta, artist,
+   tags below it) sit ~2px higher. Fixed tile heights keep the spare space at
+   the bottom. */
+.gtile-title,
+.gcard-title {
+  padding-top: 6px;
+}
+
+/* Library mode switch (동인지 ⇄ 일반 만화): the content briefly dips out of
+   focus and back (App re-adds .mode-switching) — short, like a hover. */
+@keyframes mode-switch {
+  from {
+    opacity: 0.35;
+    filter: blur(3px);
+  }
+}
+.app > .body.mode-switching {
+  animation: mode-switch 0.22s ease-out;
+}
+
+/* The app body is user-select:none (UI chrome) — text fields must stay
+   selectable so the text can be dragged-selected, copied and pasted. */
+input,
+textarea {
+  -webkit-user-select: text;
+  user-select: text;
 }

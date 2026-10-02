@@ -6,7 +6,7 @@ import type { SortMode } from '../../../shared/types'
 import type { Filter } from '../store'
 import { langCategory, LANG_CAT_LABELS, type LangCat } from '../../../shared/lang'
 import Caret from './Caret'
-import { SearchIcon, SyncIcon, GridIcon, MenuIcon, FavoriteIcon } from './icons'
+import { SearchIcon, SyncIcon, GridIcon, MenuIcon, FavoriteIcon, AddIcon, CloseIcon } from './icons'
 import Dropdown from './Dropdown'
 import WorkCard from './WorkCard'
 import WorkGridCard from './WorkGridCard'
@@ -18,6 +18,7 @@ import TagSearchInput from './TagSearchInput'
 import Pager from './Pager'
 import ConfirmModal from './ConfirmModal'
 import { mergeFavorites, type FavEntry } from '../favorites'
+import GroupName from './GroupName'
 
 export default function Home(): JSX.Element {
   const works = useStore((s) => s.works)
@@ -152,7 +153,7 @@ export default function Home(): JSX.Element {
     })
   }, [])
 
-  // Only the current library's works (hitomi vs general manga).
+  // Only the current library's works (doujin vs general manga).
   const modeWorks = useMemo(
     () => works.filter((w) => (w.library ?? 'hitomi') === libraryMode),
     [works, libraryMode]
@@ -187,7 +188,7 @@ export default function Home(): JSX.Element {
   )
 
   const favActive = filter.kind === 'favorites' || filter.kind === 'favlists'
-  // General-manga: online (toki) favorites by normalized title — a local series
+  // General-manga: online (manga-site) favorites by normalized title — a local series
   // with the same title is the same favorite (one unified list).
   const onlineNormalFavKeys = useMemo(
     () =>
@@ -285,7 +286,7 @@ export default function Home(): JSX.Element {
     onlineNormalFavKeys
   ])
 
-  // Title keys of every local general-manga series, to drop online (toki)
+  // Title keys of every local general-manga series, to drop online (manga-site)
   // favorites that are already downloaded.
   const localSeriesKeys = useMemo(
     () => (normal ? new Set(groupSeries(modeWorks, normalRoots).map((g) => titleKey(g.title))) : new Set<string>()),
@@ -293,7 +294,7 @@ export default function Home(): JSX.Element {
   )
   // Unified favorites view: online favorites NOT in the library show as online
   // cards next to the local ones ("다운로드한 것만" toggle hides them). Per mode:
-  // hitomi = numeric codes, general manga = toki urls (matched by title).
+  // doujin = numeric codes, general manga = manga-site urls (matched by title).
   const onlineOnlyFavs = useMemo(() => {
     if (!favActive || favDownloadedOnly) return []
     // Only with 기본 (the hearts) checked — imported lists show downloaded works only.
@@ -364,7 +365,7 @@ export default function Home(): JSX.Element {
     if (page > lastPage) setPage(lastPage)
   }, [lastPage, page])
   // The current page as card entries: the merged favorites list, or plain
-  // series (general manga) / works (hitomi).
+  // series (general manga) / works (doujin).
   const pageEntries = useMemo<FavEntry[]>(() => {
     const at = page * pageSize
     if (favMerged) return favMerged.slice(at, at + pageSize)
@@ -377,7 +378,7 @@ export default function Home(): JSX.Element {
     [modeWorks]
   )
   // Favorites drawer: 기본 (the hearts) + imported favorite lists (gallery
-  // codes — hitomi only). All checked by default; `favUnchecked` tracks the
+  // codes — doujin only). All checked by default; `favUnchecked` tracks the
   // ones the user turned off, so a newly imported list shows up checked.
   const favLists = useMemo(
     () => (libraryMode === 'hitomi' ? (settings.onlineFavLists ?? []) : []),
@@ -470,6 +471,7 @@ export default function Home(): JSX.Element {
           >
             <Caret up={sortDir === 'asc'} />
           </button>
+          {!normal && <span className="chip-stat">작가 {artistCount}</span>}
           <Chip active={filter.kind === 'all'} onClick={() => setFilter({ kind: 'all' })}>
             전체 {normal ? seriesTotal : modeWorks.length}
           </Chip>
@@ -522,7 +524,6 @@ export default function Home(): JSX.Element {
             />
           )}
           {favActive && <FavSortSelect value={favSort} onChange={setFavSort} />}
-          {!normal && <span className="chip-stat">작가 {artistCount}</span>}
 
           {!normal && (
           <>
@@ -581,7 +582,28 @@ export default function Home(): JSX.Element {
               그룹 분류 <span className={`dt ${openPanel === 'group' ? 'up' : ''}`} />
             </button>
             {openPanel === 'group' && (
-              <div className="cat-panel">
+              <div className="cat-panel grp-panel">
+                {/* Bulk toggle: every group + "그룹 없음" on / off. */}
+                <div className="cat-panel-actions">
+                  <button
+                    className="mini"
+                    onClick={() => {
+                      modeGroups.forEach((g) => setGroupFilter(g.id, true))
+                      setShowUngrouped(true)
+                    }}
+                  >
+                    전체 선택
+                  </button>
+                  <button
+                    className="mini"
+                    onClick={() => {
+                      modeGroups.forEach((g) => setGroupFilter(g.id, false))
+                      setShowUngrouped(false)
+                    }}
+                  >
+                    전체 선택 해제
+                  </button>
+                </div>
                 {modeGroups.map((g) => (
                   <label key={g.id} className="grp-row">
                     <input
@@ -589,9 +611,7 @@ export default function Home(): JSX.Element {
                       checked={groupFilter[g.id] !== false}
                       onChange={(e) => setGroupFilter(g.id, e.target.checked)}
                     />
-                    <span className="grp-row-name">
-                      {g.name}
-                    </span>
+                    <GroupName id={g.id} name={g.name} />
                     <span className="grp-row-count">({groupCounts[g.id] ?? 0})</span>
                     <span
                       className="grp-row-x"
@@ -600,8 +620,9 @@ export default function Home(): JSX.Element {
                         e.stopPropagation()
                         setDelGroup({ id: g.id, name: g.name })
                       }}
+                      title="그룹 삭제"
                     >
-                      ×
+                      <CloseIcon />
                     </span>
                   </label>
                 ))}
@@ -620,8 +641,8 @@ export default function Home(): JSX.Element {
                     onChange={(e) => setNewGroup(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && submitNewGroup()}
                   />
-                  <button className="mini" onClick={submitNewGroup}>
-                    + 그룹 생성
+                  <button className="mini icon" onClick={submitNewGroup} title="그룹 생성">
+                    <AddIcon />
                   </button>
                 </div>
               </div>

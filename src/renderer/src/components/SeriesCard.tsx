@@ -116,7 +116,7 @@ export default function SeriesCard({ series }: { series: SeriesGroup }): JSX.Ele
                 setOpen((o) => !o)
               }}
             >
-              화 목록 {open ? '▴' : '▾'}
+              화 목록 <span className={`dt ${open ? 'up' : ''}`} />
             </button>
           </div>
         </div>

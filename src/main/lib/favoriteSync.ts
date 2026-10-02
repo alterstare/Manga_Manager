@@ -1,12 +1,12 @@
-// The favorites model (hitomi library).
+// The favorites model (doujin library).
 //
 // ONE source of truth per work:
-//   • works with a hitomi gallery code → the favorites list (store.onlineFavs,
+//   • works with a doujin gallery code → the favorites list (store.onlineFavs,
 //     keyed by code). Work.favorite of every local copy mirrors that entry, so
 //     a heart set online, in the library, or by import is the same state.
 //   • works without a code → Work.favorite itself (they can't be in the list).
 // (General manga keeps its own in-app lists: settings.normalFavSeries /
-// normalFavChapters, linked to online toki favorites by title in the renderer.)
+// normalFavChapters, linked to online manga-site favorites by title in the renderer.)
 //
 // The favorites FOLDER is a side effect, not the truth: with
 // settings.favoriteMoveToFolder, hearting moves the work folder into
@@ -17,10 +17,10 @@ import type { OnlineFav, Work } from '../../shared/types'
 import { store } from '../context'
 import { moveToFavorites, moveFromFavorites, isUnder } from './favorites'
 
-// A numeric hitomi gallery code (toki favorites are keyed by url instead).
+// A numeric doujin gallery code (manga-site favorites are keyed by url instead).
 export const isGalleryCode = (code: string | null | undefined): code is string => !!code && /^\d+$/.test(code)
 
-// Does the work belong in the favorites list (hitomi work with a gallery code)?
+// Does the work belong in the favorites list (doujin work with a gallery code)?
 export const listKeyOf = (w: Work): string | null =>
   (w.library ?? 'hitomi') === 'hitomi' && isGalleryCode(w.code) ? w.code : null
 

@@ -27,13 +27,13 @@ export async function getCover(workId: string): Promise<string | null> {
   return kept[0] ?? imgs[0]
 }
 
-// Online (streamed) gallery image urls, keyed by hitomi code.
+// Online (streamed) gallery image urls, keyed by doujin code.
 const onlineCache = new Map<string, Promise<string[]>>()
 
 export function getOnlineImages(code: string): Promise<string[]> {
   let p = onlineCache.get(code)
   if (!p) {
-    // A toki "code" is the chapter viewer URL (http…); a hitomi code is numeric.
+    // A manga-site "code" is the chapter viewer URL (http…); a doujin code is numeric.
     p = isTokiCode(code) ? window.api.tokiReadUrls(code) : window.api.hitomiReadUrls(code)
     onlineCache.set(code, p)
   }

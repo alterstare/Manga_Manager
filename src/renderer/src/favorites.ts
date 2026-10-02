@@ -3,7 +3,7 @@
 // mergeFavorites: the home "즐겨찾기" view.
 // A favorite is ONE state across local and online (see store.toggleUnifiedFav /
 // toggleNormalUnifiedFav), so the view merges three kinds of entries:
-//   local  — a downloaded hitomi work (hearted locally and/or online)
+//   local  — a downloaded doujin work (hearted locally and/or online)
 //   series — a general-manga series (or a single favorited chapter) in the library
 //   online — an online favorite that isn't downloaded (rendered as OnlineFavCard)
 // Each carries `t` (when it was favorited) and `r` (rating) so all three sort
@@ -19,8 +19,8 @@ export type FavEntry =
   | { kind: 'online'; fav: OnlineFav; t: number; r: number }
 
 export function mergeFavorites(p: {
-  normal: boolean // general-manga mode (series) vs hitomi (works)
-  works: Work[] // hitomi: favorited local works
+  normal: boolean // general-manga mode (series) vs doujin (works)
+  works: Work[] // doujin: favorited local works
   series: SeriesGroup[] // general manga: favorited series / chapter entries
   onlineOnly: OnlineFav[] // online favorites not in the library
   onlineFavs: Record<string, OnlineFav>
@@ -36,7 +36,7 @@ export function mergeFavorites(p: {
       out.push({ kind: 'local', work: w, t: of?.addedAt ?? w.favoritedAt ?? 0, r: Math.max(w.rank, of?.rank ?? 0) })
     }
   } else {
-    // Local series ↔ online toki favorite are linked by normalized title.
+    // Local series ↔ online manga-site favorite are linked by normalized title.
     const byTitle = new Map<string, OnlineFav>()
     for (const f of Object.values(p.onlineFavs)) if (f.favorite && isTokiCode(f.code)) byTitle.set(titleKey(f.title), f)
     for (const sg of p.series) {
@@ -52,7 +52,7 @@ export function mergeFavorites(p: {
   return out
 }
 
-// Codes of hitomi online favorites (numeric gallery ids) — the ones whose
+// Codes of doujin online favorites (numeric gallery ids) — the ones whose
 // summaries (tags…) must be fetched for display.
 export function hitomiFavCodes(onlineFavs: Record<string, OnlineFav>): string[] {
   return Object.values(onlineFavs)
@@ -60,7 +60,7 @@ export function hitomiFavCodes(onlineFavs: Record<string, OnlineFav>): string[] 
     .map((f) => f.code)
 }
 
-// Unified hitomi favorites as gallery summaries for the online views (browse
+// Unified doujin favorites as gallery summaries for the online views (browse
 // "즐겨찾기" and the reader's left list): online favorites + locally favorited
 // coded works, deduped by code. Tags come from the local work when downloaded,
 // else from the cached gallery summary. With `sort`, ordered by favorite time

@@ -1,6 +1,6 @@
-// IPC: favorites (hitomi) — the hearts themselves, favorite files and lists.
+// IPC: favorites (doujin) — the hearts themselves, favorite files and lists.
 //  • Hearts: setFavoriteByCode / setOnlineFav keep the favorites list and the
-//    local copies in sync (lib/favoriteSync.ts). Toki (general-manga online)
+//    local copies in sync (lib/favoriteSync.ts). Manga-site (general-manga online)
 //    favorites, keyed by url, also live in the list but have no local copy.
 //  • Files: ONE favorites file format (Pupil-compatible JSON + our ranks) for
 //    export / merge-import / merging several files.
@@ -55,7 +55,7 @@ export function registerFavoritesIpc(): void {
     setFavoriteByCode(code, fav, meta)
   )
 
-  // Rank (and heart, for toki urls). A heart change on a gallery code is routed
+  // Rank (and heart, for manga-site urls). A heart change on a gallery code is routed
   // through setFavoriteByCode so local copies follow.
   ipcMain.handle(
     IPC.setOnlineFav,

@@ -1,4 +1,4 @@
-// IPC: hitomi online — browsing/search, gallery metadata (enrich local works),
+// IPC: doujin online — browsing/search, gallery metadata (enrich local works),
 // image urls, cover regeneration, downloads, and the deleted-gallery sweep.
 import { ipcMain } from 'electron'
 import { promises as fs } from 'fs'
@@ -43,12 +43,12 @@ function withExcludes(query: string, exclude: string[]): string {
   return query.trim() + sep + toks.join(sep)
 }
 
-// Fill a local work's tags/language/artist from hitomi using its code (also
+// Fill a local work's tags/language/artist from doujin using its code (also
 // writes the metadata sidecar into the work folder).
 async function enrichOne(workId: string): Promise<Work> {
   const w = store.get(workId)
   if (!w) throw new Error('no work')
-  if (!w.code) throw new Error('이 작품에는 hitomi 코드가 없습니다')
+  if (!w.code) throw new Error('이 작품에는 작품 코드가 없습니다')
   const meta = await fetchMeta(w.code)
   await writeSidecar(w.path, meta)
   return store.update(workId, {
@@ -72,7 +72,7 @@ export function registerHitomiIpc(): void {
 
   ipcMain.handle(IPC.hitomiList, async (_e, source: HitomiListSource, page: number) => {
     const pageSize = store.settings.pageSize || 50
-    // A bare gallery number or a hitomi link isn't a nozomi search token — look
+    // A bare gallery number or a doujin link isn't a nozomi search token — look
     // that single gallery up directly instead of a (fruitless) tag search.
     if (source.kind === 'search') {
       const q = source.query.trim()
@@ -144,7 +144,7 @@ export function registerHitomiIpc(): void {
         /* skip failures, keep going */
       }
       emit(i + 1, targets[i].title, 'enriching')
-      await delay(200) // be gentle with hitomi
+      await delay(200) // be gentle with doujin
     }
     await store.flushWorks()
     enrichRunning = false
@@ -152,7 +152,7 @@ export function registerHitomiIpc(): void {
     return updated
   })
 
-  // Sweep hitomi-coded works that no longer exist on hitomi (404) into
+  // Sweep doujin-coded works that no longer exist on doujin (404) into
   // deletedDir. Network-uncertain results are never moved, so a connection
   // problem can't relocate valid works.
   ipcMain.handle(IPC.classifyDeleted, async () => {

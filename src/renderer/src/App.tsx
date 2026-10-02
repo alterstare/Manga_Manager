@@ -19,6 +19,8 @@ import ActivityBar from './components/ActivityBar'
 import GlanceOverlay from './components/GlanceOverlay'
 import ConfirmModal from './components/ConfirmModal'
 import Tooltip from './components/Tooltip'
+import EditContextMenu from './components/EditContextMenu'
+import { startExitAnimations } from './exitAnimations'
 import { setExcluded } from './exclude'
 
 export default function App(): JSX.Element {
@@ -37,7 +39,7 @@ export default function App(): JSX.Element {
   const restoreSession = useStore((s) => s.restoreSession)
   const theme = useStore((s) => s.settings.theme)
   const [showExit, setShowExit] = useState(false)
-  // First-run: prompt to enter the hitomi online address (online access is gated
+  // First-run: prompt to enter the doujin online address (online access is gated
   // on it). Shown once per session when the address hasn't been configured.
   const [askAddr, setAskAddr] = useState(false)
 
@@ -60,6 +62,26 @@ export default function App(): JSX.Element {
       if (missing) setAskAddr(true)
     }
   }, [view])
+
+  // Mode switch (동인지 ⇄ 일반 만화): replay a brief focus-out/in on the content.
+  // Re-adding the class (with a forced reflow) restarts the animation without
+  // remounting anything, so readers / lists keep their state.
+  const bodyRef = useRef<HTMLDivElement>(null)
+  const firstMode = useRef(true)
+  useEffect(() => {
+    if (firstMode.current) {
+      firstMode.current = false
+      return
+    }
+    const el = bodyRef.current
+    if (!el) return
+    el.classList.remove('mode-switching')
+    void el.offsetWidth
+    el.classList.add('mode-switching')
+  }, [libraryMode])
+
+  // Popups fade out on close (see exitAnimations.ts).
+  useEffect(() => startExitAnimations(), [])
 
   // Boot: load persisted settings, cached works, and the previous tab session.
   useEffect(() => {
@@ -141,6 +163,10 @@ export default function App(): JSX.Element {
         // Ctrl+K / Alt+D — jump to the search box (select its text). e.code so
         // it works with the Korean IME on.
         if (focusSearch()) e.preventDefault()
+      } else if (mod && !e.altKey && !e.shiftKey && e.code === 'KeyG') {
+        // Ctrl+G — switch library mode (동인지 ⇄ 일반 만화), like the menu button.
+        e.preventDefault()
+        st.setLibraryMode(st.libraryMode === 'normal' ? 'hitomi' : 'normal')
       } else if (e.altKey && e.key === 'ArrowLeft') {
         e.preventDefault()
         back()
@@ -210,7 +236,7 @@ export default function App(): JSX.Element {
     <div className="app">
       <TabBar />
       <MenuDrawer />
-      <div className="body">
+      <div className="body" ref={bodyRef}>
         {view === 'settings' ? (
           <Settings />
         ) : view === 'download' ? (
@@ -234,6 +260,7 @@ export default function App(): JSX.Element {
       </div>
       <ActivityBar />
       <Tooltip />
+      <EditContextMenu />
       <GlanceOverlay />
       {cfChallenge && (
         <div className="cf-banner">
@@ -244,11 +271,11 @@ export default function App(): JSX.Element {
       {askAddr && (
         <ConfirmModal
           icon="🌐"
-          title={libraryMode === 'normal' ? '만화 사이트 온라인 주소를 입력하세요' : '히토미 온라인 주소를 입력하세요'}
+          title={libraryMode === 'normal' ? '만화 사이트 온라인 주소를 입력하세요' : '동인지 온라인 주소를 입력하세요'}
           desc={
             libraryMode === 'normal'
               ? '온라인 둘러보기·검색·다운로드를 사용하려면 설정 → 네트워크에서 만화 사이트 온라인 주소를 입력해야 합니다. 지금 설정을 열까요?'
-              : '온라인 둘러보기·검색·다운로드를 사용하려면 설정 → 네트워크에서 히토미 온라인 주소를 입력해야 합니다. 지금 설정을 열까요?'
+              : '온라인 둘러보기·검색·다운로드를 사용하려면 설정 → 네트워크에서 동인지 온라인 주소를 입력해야 합니다. 지금 설정을 열까요?'
           }
           confirmLabel="설정 열기"
           cancelLabel="나중에"
@@ -304,7 +331,7 @@ function ReaderSplit(): JSX.Element {
     }
     // While dragging, resize the pane by writing its width DIRECTLY to the DOM —
     // no store update per frame. Committing to the store each mousemove re-renders
-    // the whole left list (the hitomi library list can be thousands of rows),
+    // the whole left list (the doujin library list can be thousands of rows),
     // which made resizing very laggy. We commit once on mouseup instead.
     const onMove = (e: MouseEvent): void => {
       if (!dragging.current || !paneRef.current) return

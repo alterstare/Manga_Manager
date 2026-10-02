@@ -8,8 +8,9 @@ import Stars from './Stars'
 import { SearchIcon, FavoriteIcon, AutoStoriesIcon } from './icons'
 import { useTokiStatus } from './useTokiStatus'
 import SearchClear from './SearchClear'
+import { useTabState } from './useTabState'
 
-// Left list shown while reading a toki chapter: the sibling chapters of the active
+// Left list shown while reading a manga-site chapter: the sibling chapters of the active
 // tab's series. Mirrors the local general-manga left list (LibraryList) so the
 // reader chrome is identical between local and online in general-manga mode.
 export default function TokiChapterList(): JSX.Element {
@@ -36,8 +37,8 @@ export default function TokiChapterList(): JSX.Element {
   const [chapters, setChapters] = useState<TokiChapter[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [input, setInput] = useState('')
-  const [applied, setApplied] = useState('')
+  const [input, setInput] = useTabState('input', '')
+  const [applied, setApplied] = useTabState('applied', '')
 
   useEffect(() => {
     if (!seriesUrl) {

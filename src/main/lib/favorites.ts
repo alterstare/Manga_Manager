@@ -3,7 +3,7 @@ import { join, basename, dirname, resolve, sep } from 'path'
 import type { Work, WorkGroup } from '../../shared/types'
 
 // Sanitize a group name for use as a folder name (strip illegal chars).
-function safeName(name: string): string {
+export function safeName(name: string): string {
   return name.replace(/[\\/:*?"<>|]/g, '_').replace(/\s+$/g, '').trim() || 'group'
 }
 
@@ -134,7 +134,7 @@ export async function mergeSeries(
 }
 
 // Move a work's folder into an arbitrary destination directory (used to sweep
-// hitomi-deleted works aside). Cleans up the emptied source parent if possible.
+// doujin-deleted works aside). Cleans up the emptied source parent if possible.
 export async function moveWorkToFolder(work: Work, destDir: string): Promise<Partial<Work>> {
   await fs.mkdir(destDir, { recursive: true })
   const dest = await uniqueDest(destDir, basename(work.path))
@@ -151,4 +151,52 @@ export async function moveFromFavorites(work: Work): Promise<Partial<Work>> {
     : work.homePath
   await moveDir(work.path, dest)
   return { favorite: false, homePath: null, path: dest }
+}
+
+// Rename a group's folders on disk. Group membership IS the folder name
+// (<base>/<group name>/<work>, re-inferred by the scanner), so a rename must
+// rename every distinct group folder that holds a member work. All-or-nothing:
+// if any folder can't be renamed (target name taken, folder in use…), the ones
+// already renamed are put back and the call throws. Returns old → new folder.
+export async function renameGroupFolders(
+  members: Work[],
+  oldName: string,
+  newName: string
+): Promise<Map<string, string>> {
+  const oldBase = safeName(oldName).toLowerCase()
+  const folders = new Set<string>()
+  for (const w of members) {
+    const dir = dirname(w.path)
+    if (basename(dir).toLowerCase() === oldBase) folders.add(dir)
+  }
+  const done = new Map<string, string>()
+  const undo = async (): Promise<void> => {
+    for (const [from, to] of [...done].reverse()) await fs.rename(to, from).catch(() => {})
+  }
+  for (const dir of folders) {
+    const dest = join(dirname(dir), safeName(newName))
+    if (dest === dir) continue
+    try {
+      if (dest.toLowerCase() === dir.toLowerCase()) {
+        // Case-only change: Windows treats both names as the same folder, so
+        // go through a temporary name.
+        const tmp = `${dir}.__rename${Date.now()}`
+        await fs.rename(dir, tmp)
+        await fs.rename(tmp, dest)
+      } else {
+        if (await exists(dest)) throw new Error(`같은 이름의 폴더가 이미 있습니다: ${dest}`)
+        await fs.rename(dir, dest)
+      }
+      done.set(dir, dest)
+    } catch (e) {
+      await undo()
+      const msg = (e as Error).message
+      throw new Error(
+        msg.startsWith('같은 이름')
+          ? msg
+          : `폴더 이름을 바꿀 수 없습니다 (사용 중일 수 있음): ${dir}`
+      )
+    }
+  }
+  return done
 }

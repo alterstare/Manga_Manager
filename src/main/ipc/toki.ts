@@ -1,4 +1,4 @@
-// IPC: general-manga online (toki-family mirror + backup gnuboard sites) —
+// IPC: general-manga online (manga-site-family mirror + backup gnuboard sites) —
 // lists, chapters, image urls, author/title/cover lookups and downloads into
 // the general-manga library. Scraping itself lives in lib/toki.ts.
 import { ipcMain } from 'electron'
@@ -25,7 +25,7 @@ import {
 import { encodeToki, thumbFile } from '../lib/media'
 import { runDownload } from '../downloads'
 
-// Where general-manga downloads go — never the hitomi library.
+// Where general-manga downloads go — never the doujin library.
 function normalDestRoot(): string {
   const s = store.settings
   const dest = s.normalDownloadDir ?? normalRoots(s)[0]
@@ -39,14 +39,14 @@ async function importDownloaded(dir: string, artist?: string | null): Promise<Wo
   const scanned = await scanRoot(dir, store.settings, 'normal')
   const merged = store.mergeScanPartial(scanned)
   // The artist belongs to THIS series only. mergeScanPartial returns the whole
-  // library, so stamping its result overwrote every work's artist (hitomi
+  // library, so stamping its result overwrote every work's artist (doujin
   // included) with the downloaded series' author.
   if (artist) for (const w of scanned) store.update(w.id, { artist })
   await store.flushWorks()
   return artist ? [...store.works.values()] : merged
 }
 
-// Download a toki series (all chapters, or only `chapterUrls`).
+// Download a manga-site series (all chapters, or only `chapterUrls`).
 function runTokiDownload(seriesUrl: string, title: string, chapterUrls?: string[]): Promise<Work[]> {
   const destRoot = normalDestRoot()
   return runDownload(seriesUrl, title, async (signal, report) => {

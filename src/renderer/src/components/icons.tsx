@@ -89,6 +89,7 @@ function mkIcon(path: string) {
   }
 }
 
+export const EditLineIcon = mkIcon('m10.05 21l2-2H22v2zM3 21v-4.25L16.2 3.575q.275-.275.65-.425t.775-.15t.763.162t.662.438L20.425 5q.275.3.425.663T21 6.4q0 .4-.137.762t-.438.663L7.25 21zM17.6 7.8L19 6.4L17.6 5l-1.4 1.4z')
 export const ShieldIcon = mkIcon('M12 22q-3.475-.875-5.738-3.988T4 11.1V5l8-3l8 3v6.1q0 3.8-2.262 6.913T12 22')
 export const HomeIcon = mkIcon('M4 21V9l8-6l8 6v12h-6v-7h-4v7z')
 export const LanguageIcon = mkIcon(
@@ -150,6 +151,7 @@ export function AutoStoriesIcon({ className }: IconProps): JSX.Element {
   )
 }
 
+export const AddIcon = mkIcon('M11 13H5v-2h6V5h2v6h6v2h-6v6h-2z')
 export const CloseIcon = mkIcon('M6.4 19L5 17.6l5.6-5.6L5 6.4L6.4 5l5.6 5.6L17.6 5L19 6.4L13.4 12l5.6 5.6l-1.4 1.4l-5.6-5.6z')
 
 const FAV_FILLED =

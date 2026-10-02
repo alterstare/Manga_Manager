@@ -15,7 +15,7 @@ const NO_TAGS: string[] = []
 // representative chapter (`rep`, chapter 1); favorite / rank / group / delete
 // apply to the whole series.
 //
-// Favorites are in-app (no folder move) and unified with the online (toki)
+// Favorites are in-app (no folder move) and unified with the online (manga-site)
 // favorite of the same title. In the favorites view a single favorited chapter
 // shows as a synthetic entry (key CHAP_FAV_PREFIX + work id) whose heart
 // toggles just that chapter.

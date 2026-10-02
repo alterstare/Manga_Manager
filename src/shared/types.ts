@@ -11,10 +11,10 @@ export interface Work {
   path: string // absolute path to the work folder
   title: string
   artist: string | null
-  code: string | null // hitomi.la gallery id, when present in folder name
+  code: string | null // the site gallery id, when present in folder name
   language: string | null
   pageCount: number
-  tags: string[] // tags parsed from metadata (hitomi / rules)
+  tags: string[] // tags parsed from metadata (doujin / rules)
   manualTags: string[] // tags the user added by hand
   favorite: boolean
   homePath: string | null // original location, set when moved into favorites dir
@@ -57,7 +57,7 @@ export interface ManualCollection {
 export interface WorkGroup {
   id: string
   name: string
-  // Which library the group belongs to; groups are scoped per mode so hitomi
+  // Which library the group belongs to; groups are scoped per mode so doujin
   // group names don't appear in the general-manga view. Missing = 'hitomi'.
   mode?: 'hitomi' | 'normal'
 }
@@ -84,19 +84,19 @@ export interface HitomiMeta {
 
 export interface Settings {
   libraryRoots: string[]
-  // Hitomi favorites folder. With favoriteMoveToFolder, hearting a work moves its
+  // Doujin favorites folder. With favoriteMoveToFolder, hearting a work moves its
   // folder in here (and back on unheart). A work newly found in this folder by a
   // scan is added to the favorites. The heart itself is NOT derived from the
   // location — see the favorites model in main/lib/favoriteSync.ts.
   favoritesDir: string | null
   favoriteMoveToFolder: boolean
   downloadDir: string | null
-  // Preferred image encoding when downloading hitomi galleries. webp is more
+  // Preferred image encoding when downloading doujin galleries. webp is more
   // widely supported by other viewers; avif is smaller. Falls back per-page when
   // the preferred encoding isn't offered for a file.
   downloadImageFormat: 'avif' | 'webp'
   // General-manga ("normal") library: separate folders scanned as the normal
-  // library. Works found here are stamped library:'normal' (no hitomi metadata).
+  // library. Works found here are stamped library:'normal' (no doujin metadata).
   normalRoots: string[]
   // "Artist folder" roots: each immediate child folder of one of these names an
   // artist. Every work found beneath that child folder is stamped with that
@@ -108,17 +108,17 @@ export interface Settings {
   flattenCollectThreshold: number
   // Manual merges the user made in the collection manager (survive rescans).
   manualCollections: ManualCollection[]
-  // Where general-manga online downloads land. Kept separate from the hitomi
-  // downloadDir so online manga/webtoon don't leak into the hitomi library.
+  // Where general-manga online downloads land. Kept separate from the doujin
+  // downloadDir so online manga/webtoon don't leak into the doujin library.
   // Falls back to the first normalRoot when unset.
   normalDownloadDir: string | null
   // Where extracted-text (.txt) exports are written. When unset, exporting errors
   // and asks the user to pick a folder in Settings.
   textExportDir: string | null
-  // Where hitomi-coded works that no longer exist on hitomi (deleted) are swept to
+  // Where doujin-coded works that no longer exist on doujin (deleted) are swept to
   // when the user runs "삭제된 작품 분류". Unset → the classify action errors.
   deletedDir: string | null
-  // General-manga online source (toki-family mirror, e.g. sbxh9.com). The site
+  // General-manga online source (manga-site-family mirror, e.g. sbxh9.com). The site
   // bot-blocks raw requests, so we scrape it through a hidden BrowserWindow. The
   // domain rotates, so it is configurable; selectors live in main/lib/toki.ts.
   tokiBaseUrl: string
@@ -133,7 +133,7 @@ export interface Settings {
   ignoreBracketTagsInSort: boolean
   marginWidth: number
   defaultSort: SortMode
-  autoEnrichOnScan: boolean // fetch hitomi metadata for coded works after a scan
+  autoEnrichOnScan: boolean // fetch doujin metadata for coded works after a scan
   listPaneWidth: number // px width of the left list pane in reader view
   normalListPaneWidth: number // px width of the left list pane in general-manga mode
   readerPageGap: boolean // scroll mode: leave a gap between pages
@@ -161,9 +161,9 @@ export interface Settings {
   // General-manga online: genres hidden from browse/search results (client-side;
   // the site has no exclude filter). Matched against each card's genre list.
   tokiExcludeGenres: string[]
-  hitomiBaseUrl: string // hitomi content/CDN host (e.g. 'gold-usergeneratedcontent.net'); '' = online disabled
+  hitomiBaseUrl: string // doujin content/CDN host (e.g. 'gold-usergeneratedcontent.net'); '' = online disabled
   readerMode: 'scroll' | 'paged' | 'spread'
-  // Last-used reader mode, remembered separately per library so hitomi and
+  // Last-used reader mode, remembered separately per library so doujin and
   // general-manga keep their own preferred view across restarts. Falls back to
   // readerMode when unset.
   lastReaderMode: { hitomi: 'scroll' | 'paged' | 'spread'; normal: 'scroll' | 'paged' | 'spread' }
@@ -200,7 +200,7 @@ export interface Settings {
   // multi-tag combo, comma-separated tokens). Shown at the top of the search-box
   // dropdown so the user can pick a saved tag/combo to run.
   favoriteSearches: string[]
-  // When set (hitomi setting), the other mode's tabs are also shown in the tab
+  // When set (doujin setting), the other mode's tabs are also shown in the tab
   // bar, bundled into a collapsible cluster (like a tab group).
   unifyTabsAcrossModes: boolean
   groups: WorkGroup[] // user-defined collections
@@ -228,7 +228,7 @@ export interface Settings {
   papagoClientSecret: string
   papagoImageEndpoint: string // Papago Image Translation(Text) endpoint
   translateServerUrl: string // local manga-image-translator server (provider B)
-  // Per-mode overrides for the "split" keys (SPLIT_SETTING_KEYS) so hitomi and
+  // Per-mode overrides for the "split" keys (SPLIT_SETTING_KEYS) so doujin and
   // general-manga keep independent display/reader/sort preferences even when the
   // setting name is shared. The active mode's overlay is merged over the base.
   perMode?: Partial<Record<'hitomi' | 'normal', Partial<Settings>>>
@@ -246,16 +246,16 @@ export interface Settings {
   // tags converted to code lists and the old general-manga favorites folder
   // setting dropped (main/lib/favoriteSync.ts migrateFavorites).
   favoritesUnified: boolean
-  // User-defined hitomi folder-name patterns for locating the gallery id. Tokens:
+  // User-defined doujin folder-name patterns for locating the gallery id. Tokens:
   //   -id-     gallery id (digits) — REQUIRED; a pattern without it is ignored
   //   -title-  work title   -artist- artist   -group- circle/group
-  // A folder is a hitomi work only if it matches one of these AND the -id- slot
+  // A folder is a doujin work only if it matches one of these AND the -id- slot
   // holds digits — so an incidental 7-digit number in the title no longer looks
   // like a code. Patterns are tried in order (first match wins). Empty = defaults.
   hitomiNamePatterns: string[]
   // Index into hitomiNamePatterns of the pattern used to name downloaded folders.
   hitomiDownloadPatternIdx: number
-  // Max number of online works (hitomi galleries / toki series) downloading at
+  // Max number of online works (doujin galleries / manga-site series) downloading at
   // once. Extra downloads queue until a slot frees. 0 = unlimited.
   maxConcurrentDownloads: number
 }
@@ -282,7 +282,7 @@ export const SPLIT_SETTING_KEYS = [
   'ignoreBracketTagsInSort'
 ] as const
 
-// Persisted favorite/rank for an online (hitomi) gallery, keyed by code. Display
+// Persisted favorite/rank for an online (doujin) gallery, keyed by code. Display
 // meta is cached so the favorites list renders without re-fetching.
 export interface OnlineFav {
   code: string

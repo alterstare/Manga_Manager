@@ -43,7 +43,7 @@ function isFlattenRoot(dir: string, settings: Settings): boolean {
 }
 
 // Which library a given root path belongs to (normal if it's a configured
-// normal root, else hitomi). Used by the per-folder rescan.
+// normal root, else doujin). Used by the per-folder rescan.
 export function libraryOfRoot(root: string, settings: Settings): 'hitomi' | 'normal' {
   const r = resolve(root)
   return normalRoots(settings).some((n) => resolve(n) === r) ? 'normal' : 'hitomi'
@@ -269,7 +269,7 @@ async function makeWork(
   artistOverride: string | null = null
 ): Promise<Work> {
   const folderName = basename(dir)
-  // Only hitomi folders carry gallery ids; skip id detection for normal manga so
+  // Only doujin folders carry gallery ids; skip id detection for normal manga so
   // chapter numbers never look like codes.
   const parsed = library === 'hitomi' ? parseName(folderName, settings.hitomiNamePatterns) : { artist: null, code: null, title: folderName.replace(/\s+/g, ' ').trim() }
   // General-manga chapter folders reuse names across series, so key their id on
@@ -282,7 +282,7 @@ async function makeWork(
     /* keep default */
   }
 
-  // Sidecar (meta.hitomi.json) carries hitomi metadata so it survives rescans.
+  // Sidecar (meta.hitomi.json) carries doujin metadata so it survives rescans.
   const meta = await readSidecar(dir)
   const tags = [...new Set([...applyGenreRules(dir, settings), ...(meta?.tags ?? [])])]
 
@@ -291,7 +291,7 @@ async function makeWork(
     path: dir,
     title: parsed.title,
     // Artist-folder roots override the artist with the folder name; otherwise use
-    // the parsed / hitomi-metadata artist.
+    // the parsed / doujin-metadata artist.
     artist: artistOverride ?? parsed.artist ?? (meta?.artists.length ? meta.artists.join(', ') : null),
     code: parsed.code ?? meta?.code ?? null,
     language: meta?.language ?? null,
@@ -320,7 +320,7 @@ function safeName(name: string): string {
   return name.replace(/[\\/:*?"<>|]/g, '_').replace(/\s+$/g, '').trim() || 'group'
 }
 
-// Inside the hitomi favorites folder? (General manga has no favorites folder.)
+// Inside the doujin favorites folder? (General manga has no favorites folder.)
 function underFavorites(dir: string, settings: Settings, library: 'hitomi' | 'normal'): boolean {
   const favDir = library === 'normal' ? null : settings.favoritesDir
   if (!favDir) return false

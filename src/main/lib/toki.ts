@@ -1,4 +1,4 @@
-// General-manga online source: 뉴토끼(newtoki)-style mirror, default sbxh9.com.
+// General-manga online source: 일반 만화 사이트(the manga site)-style mirror, default sbxh9.com.
 //
 // The site is a React SPA behind a Cloudflare bot challenge. The CF "Just a
 // moment" / Turnstile check can NOT be solved headlessly — so when we hit it we
@@ -133,7 +133,7 @@ function blockHiddenMedia(): void {
   })
 }
 
-// True once the user has a Cloudflare clearance cookie for the toki domain.
+// True once the user has a Cloudflare clearance cookie for the manga-site domain.
 async function hasClearance(): Promise<boolean> {
   try {
     const cookies = await session.fromPartition(PARTITION).cookies.get({ name: 'cf_clearance' })
@@ -502,7 +502,7 @@ const CHAPTERS_SCRIPT = `(() => {
 // <img class="viewer-lazy-img" data-src="<real cdn url>" alt="page N"> inside
 // .vw-imgs; the real URL is in data-src (present at load, no scroll needed).
 // Ad images have no viewer-lazy-img class, so this never picks them up. Image
-// host varies per chapter (booktoki/…); referer = the toki domain (set by
+// host varies per chapter (booktoki/…); referer = the manga-site domain (set by
 // fetchTokiBuffer). img_list kept as a legacy fallback.
 const READ_SCRIPT = `(() => {
   const abs = (u) => { if (!u) return null; if (u.startsWith('//')) return 'https:' + u; try { return new URL(u, location.href).href } catch { return u } }
@@ -740,7 +740,7 @@ export async function tokiOpenSite(base: string, url?: string): Promise<void> {
 }
 
 // --- Generic (gnuboard-style backup site) adapter ---
-// These sites aren't the newtoki React SPA: the user opens the site by hand,
+// These sites aren't the the manga site React SPA: the user opens the site by hand,
 // navigates to a chapter-LIST page, and we scrape whatever is currently loaded.
 // Selectors mirror the user's tokidownloader.txt (list + viewer variants).
 
@@ -895,7 +895,7 @@ export async function downloadGenericChapters(
 }
 
 // Best-guess cover image url for a series title (search → first card thumb).
-// Returns the raw CDN url (unwrapped); the caller fetches it via the toki
+// Returns the raw CDN url (unwrapped); the caller fetches it via the manga-site
 // session. Used by the offline library's "cover regen from online" feature.
 export async function tokiCoverForTitle(base: string, title: string): Promise<string | null> {
   if (!title.trim()) return null
@@ -905,7 +905,7 @@ export async function tokiCoverForTitle(base: string, title: string): Promise<st
   return hit?.thumb ?? null
 }
 
-// Fetch a toki image through the persistent session + site referer (a bare
+// Fetch a manga-site image through the persistent session + site referer (a bare
 // <img> would get a 403). Used by the mangaimg://toki protocol host.
 const IMG_TIMEOUT_MS = 30000 // per attempt, headers + body
 class HttpError extends Error {}
@@ -929,7 +929,7 @@ export async function fetchTokiBuffer(base: string, url: string): Promise<Buffer
       })
       if (!res.ok) {
         clearTimeout(timer)
-        throw new HttpError(`toki img ${res.status}`)
+        throw new HttpError(`image ${res.status}`)
       }
       const buf = Buffer.from(await res.arrayBuffer())
       clearTimeout(timer)

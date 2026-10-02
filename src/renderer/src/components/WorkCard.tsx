@@ -148,14 +148,14 @@ export default function WorkCard({ work }: { work: Work }): JSX.Element {
               setFindKo((v) => !v)
             }}
           >
-            한국어 {findKo ? '▴' : '▾'}
+            한국어 <span className={`dt ${findKo ? 'up' : ''}`} />
           </button>
           <div className="export-wrap" onClick={(e) => e.stopPropagation()}>
             <button
               className={`mini ${exportOpen ? 'on' : ''}`}
               onClick={() => setExportOpen((v) => !v)}
             >
-              내보내기 {exportOpen ? '▴' : '▾'}
+              내보내기 <span className={`dt ${exportOpen ? 'up' : ''}`} />
             </button>
             {exportOpen && (
               <div className="export-menu">

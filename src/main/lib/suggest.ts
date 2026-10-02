@@ -3,7 +3,7 @@ import { promises as fs } from 'fs'
 import { join } from 'path'
 
 // Autocomplete backend for the online search box. Two sources are merged:
-//   1. A bundled snapshot of every hitomi tag (resources/hitomi-tokens.json,
+//   1. A bundled snapshot of every doujin tag (resources/hitomi-tokens.json,
 //      `{ "artist:foo": count, "character:bar": count, "series:…", "tag:…" }`),
 //      so the full artist/character/series/tag list is searchable offline.
 //   2. Tokens harvested from galleries the user actually browses, persisted to
