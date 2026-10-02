@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { JSX } from 'react'
-import { useStore, useSeriesRoots } from '../store'
+import { useStore, useSeriesRoots, lastReadKey } from '../store'
 import type { TokiListSource, TokiSummary, TokiSort, TokiType } from '../../../shared/ipc'
 import type { OnlineFav } from '../../../shared/types'
 import Stars from './Stars'
@@ -38,6 +38,8 @@ function favMeta(g: TokiSummary, artist: string | null): Partial<OnlineFav> {
 // hitomi Browse. Clicking a series fetches its chapters and opens chapter 1.
 // Favorites/ratings reuse the online-fav store, keyed by the series url (http),
 // which keeps them separate from hitomi's numeric-code favorites.
+const NO_GENRES: string[] = []
+
 export default function TokiBrowse(): JSX.Element {
   const tokiStatus = useTokiStatus()
   const openToki = useStore((s) => s.openToki)
@@ -226,13 +228,28 @@ export default function TokiBrowse(): JSX.Element {
     rows.sort((x, y) => (favSort === 'rank' ? y.r - x.r || y.t - x.t : y.t - x.t))
     return rows.map((x) => x.g)
   }, [onlineFavs, favSort, localFavKeys, localSeries, normalFavAt])
+  // Excluded genres (right-click a genre chip): hide cards carrying any of them.
+  const excludeGenres = useStore((s) => s.settings.tokiExcludeGenres) ?? NO_GENRES
+  const toggleExclude = (g: string): void => {
+    const st = useStore.getState()
+    const cur = st.settings.tokiExcludeGenres ?? []
+    const next = cur.includes(g) ? cur.filter((x) => x !== g) : [...cur, g]
+    const s = { ...st.settings, tokiExcludeGenres: next }
+    useStore.setState({ settings: s })
+    void window.api.saveSettings(s)
+  }
+  const shownItems = useMemo(() => {
+    if (!excludeGenres.length) return items
+    const ex = new Set(excludeGenres)
+    return items.filter((it) => !(it.genre ?? '').split(',').some((g) => ex.has(g.trim())))
+  }, [items, excludeGenres])
   // "온라인만" toggle hides the local-only entries.
   const gallery = favMode
     ? favOnlineOnly
       ? // not downloaded yet: drop library-only entries and series already in the library
         favGalleries.filter((g) => !g.url.startsWith('local:') && !localSeries.has(titleKey(g.title)))
       : favGalleries
-    : items
+    : shownItems
 
   const openSeries = async (
     g: TokiSummary,
@@ -256,7 +273,10 @@ export default function TokiBrowse(): JSX.Element {
         window.api.tokiSeriesTitle(g.url).catch(() => null)
       ])
       if (author) setAuthors((a) => ({ ...a, [g.url]: author }))
-      const first = chapters[0]
+      // 이어보기: open the most recently read chapter instead of the first.
+      const st = useStore.getState()
+      const lastUrl = st.settings.resumeReading !== false ? lastReadKey(st.readProgress, chapters.map((c) => c.url)) : null
+      const first = chapters.find((c) => c.url === lastUrl) ?? chapters[0]
       const payload = {
         code: first.url,
         title: seriesTitle || g.title,
@@ -390,15 +410,36 @@ export default function TokiBrowse(): JSX.Element {
             {genres.map((g) => (
               <span
                 key={g}
-                className={`tag ${genre === g ? 'fav-tag' : ''}`}
+                className={`tag ${genre === g ? 'fav-tag' : ''} ${excludeGenres.includes(g) ? 'excluded' : ''}`}
+                title={g === '전체' ? undefined : excludeGenres.includes(g) ? '우클릭: 제외 해제' : '클릭: 이 장르만 · 우클릭: 이 장르 제외'}
                 onClick={() => {
                   setGenre(g)
                   applySource({ genre: g })
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  if (g !== '전체') toggleExclude(g)
                 }}
               >
                 {g}
               </span>
             ))}
+            {excludeGenres.length > 0 && (
+              <span className="genre-ex-info">
+                제외 {excludeGenres.length}개
+                {items.length > shownItems.length && ` · 이 쪽에서 ${items.length - shownItems.length}개 숨김`}
+                <span
+                  className="mini"
+                  onClick={() => {
+                    const s = { ...useStore.getState().settings, tokiExcludeGenres: [] }
+                    useStore.setState({ settings: s })
+                    void window.api.saveSettings(s)
+                  }}
+                >
+                  해제
+                </span>
+              </span>
+            )}
           </div>
         )}
       </div>

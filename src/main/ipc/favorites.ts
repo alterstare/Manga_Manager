@@ -47,6 +47,9 @@ export function registerFavoritesIpc(): void {
   // ---------- hearts ----------
 
   ipcMain.handle(IPC.getOnlineFavs, () => [...store.onlineFavs.values()])
+  // General-manga last-read chapters (이어보기 / last-read mark).
+  ipcMain.handle(IPC.getReadProgress, () => store.readProgress)
+  ipcMain.handle(IPC.markRead, (_e, key: string) => store.markRead(key))
 
   ipcMain.handle(IPC.setFavoriteByCode, (_e, code: string, fav: boolean, meta?: Partial<OnlineFav>) =>
     setFavoriteByCode(code, fav, meta)

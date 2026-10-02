@@ -5,7 +5,7 @@
 // the implementation below is grouped into the same sections.
 import { create } from 'zustand'
 import { useMemo } from 'react'
-import type { Work, Settings, SortMode, SessionState, OnlineFav, FitMode } from '../../shared/types'
+import type { Work, Settings, SortMode, SessionState, OnlineFav, FitMode, ReadProgress } from '../../shared/types'
 import { DEFAULT_SETTINGS, SPLIT_SETTING_KEYS } from '../../shared/types'
 import type { HitomiListSource, HitomiProgress, TokiChapter, UpdateStatus } from '../../shared/ipc'
 import { exportWorkText, exportWorkImages } from './export'
@@ -232,6 +232,10 @@ interface AppState {
   // name elsewhere (reader header / card). TokiBrowse consumes it on change.
   tokiAuthorSeed: { name: string; nonce: number } | null
   onlineProgress: Record<string, { scrollTop: number; pageIdx: number }>
+  // General-manga chapter → when last opened (persisted, main progress.json).
+  readProgress: Record<string, ReadProgress>
+  setReadProgressAll: (p: Record<string, ReadProgress>) => void
+  markRead: (key: string) => void
   downloads: DownloadItem[] // active + finished downloads this session (newest first)
   onlineFavs: Record<string, OnlineFav> // hitomi gallery favorites/ranks by code
   jobs: Job[] // background tasks (export/scan) this session, newest first
@@ -599,6 +603,7 @@ export const useStore = create<AppState>((set, get) => ({
   browseTopNonce: 0,
   tokiAuthorSeed: null,
   onlineProgress: {},
+  readProgress: {},
   downloads: [],
   onlineFavs: {},
   jobs: [],
@@ -1657,6 +1662,11 @@ export const useStore = create<AppState>((set, get) => ({
     })),
   setOnlineProgress: (code, p) =>
     set((st) => ({ onlineProgress: { ...st.onlineProgress, [code]: p } })),
+  setReadProgressAll: (p) => set({ readProgress: p }),
+  markRead: (key) => {
+    set((st) => ({ readProgress: { ...st.readProgress, [key]: { at: Date.now() } } }))
+    void window.api.markRead(key)
+  },
 
   setOnlineFavs: (list) =>
     set({ onlineFavs: Object.fromEntries(list.map((f) => [f.code, f])) }),
@@ -1784,4 +1794,19 @@ export function useLibraryCodes(): {
     }
     return { libCodes, codeWorkId, localFavCodes }
   }, [works])
+}
+
+// Of `keys` (chapter work ids / toki chapter urls), the one read most recently —
+// "read up to here" in a series list, and where 이어보기 reopens a series.
+export function lastReadKey(progress: Record<string, ReadProgress>, keys: string[]): string | null {
+  let best: string | null = null
+  let at = 0
+  for (const k of keys) {
+    const p = progress[k]
+    if (p && p.at > at) {
+      at = p.at
+      best = k
+    }
+  }
+  return best
 }

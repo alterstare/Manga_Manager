@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { JSX, MouseEvent } from 'react'
 import type { Work } from '../../../shared/types'
-import { useStore } from '../store'
+import { useStore, lastReadKey } from '../store'
 import { CHAP_FAV_PREFIX, isOnlineTitleFav, type SeriesGroup } from '../util'
 import ContextMenu from './ContextMenu'
 import { useTagMenu } from './useTagMenu'
@@ -73,6 +73,11 @@ export function useSeriesCard(series: SeriesGroup): {
 
   const chapters = series.chapters
   const rep = chapters[0]
+  // What a click opens: with 이어보기 on, the most recently read chapter; else
+  // the first.
+  const resumeOn = useStore((s) => s.settings.resumeReading !== false)
+  const lastId = useStore((s) => (resumeOn ? lastReadKey(s.readProgress, chapters.map((c) => c.id)) : null))
+  const openId = lastId ?? rep?.id
   const artist = chapters.find((c) => c.artist)?.artist ?? null
   const language = chapters.find((c) => c.language)?.language ?? null
   const maxRank = Math.max(0, ...chapters.map((c) => c.rank))
@@ -82,22 +87,22 @@ export function useSeriesCard(series: SeriesGroup): {
     // selection (drag-to-copy) never opens anything.
     onClickCapture: (e: MouseEvent): void => {
       if (window.getSelection()?.toString()) return e.stopPropagation()
-      if (e.altKey && rep) {
+      if (e.altKey && openId) {
         e.preventDefault()
         e.stopPropagation()
-        openGlance({ workId: rep.id })
+        openGlance({ workId: openId })
       }
     },
     onClick: (): void => {
-      if (rep) openTab(rep.id)
+      if (openId) openTab(openId)
     },
     onMouseDown: (e: MouseEvent): void => {
       if (e.button === 1) e.preventDefault() // block middle-click autoscroll
     },
     onAuxClick: (e: MouseEvent): void => {
-      if (e.button !== 1 || !rep) return
+      if (e.button !== 1 || !openId) return
       e.preventDefault()
-      openTabBackground(rep.id)
+      openTabBackground(openId)
     },
     onContextMenu: (e: MouseEvent): void => {
       e.preventDefault()

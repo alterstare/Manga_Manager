@@ -40,6 +40,11 @@ export interface Work {
   sources?: string[]
 }
 
+// When a general-manga chapter was last opened (store.readProgress).
+export interface ReadProgress {
+  at: number // ms timestamp
+}
+
 // A user-defined merge: several work folders shown as one "collection" work.
 // Survives rescans because it lives in settings (works.json is rebuilt on scan).
 export interface ManualCollection {
@@ -150,6 +155,12 @@ export interface Settings {
   // Route the general-manga site through the built-in green-tunnel proxy
   // (ClientHello fragmentation + DoH) to get past SNI-based blocking.
   bypassTunnel: boolean
+  // 이어보기: clicking a general-manga series opens its last-read chapter
+  // (store.readProgress) instead of the first.
+  resumeReading: boolean
+  // General-manga online: genres hidden from browse/search results (client-side;
+  // the site has no exclude filter). Matched against each card's genre list.
+  tokiExcludeGenres: string[]
   hitomiBaseUrl: string // hitomi content/CDN host (e.g. 'gold-usergeneratedcontent.net'); '' = online disabled
   readerMode: 'scroll' | 'paged' | 'spread'
   // Last-used reader mode, remembered separately per library so hitomi and
@@ -346,6 +357,8 @@ export const DEFAULT_SETTINGS: Settings = {
   dohServer: 'https://cloudflare-dns.com/dns-query',
   proxyServer: '',
   bypassTunnel: false,
+  resumeReading: true,
+  tokiExcludeGenres: [],
   hitomiBaseUrl: '',
   readerMode: 'scroll',
   lastReaderMode: { hitomi: 'scroll', normal: 'scroll' },

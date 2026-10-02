@@ -64,17 +64,19 @@ export default function App(): JSX.Element {
   // Boot: load persisted settings, cached works, and the previous tab session.
   useEffect(() => {
     ;(async () => {
-      const [settings, works, session, onlineFavs] = await Promise.all([
+      const [settings, works, session, onlineFavs, progress] = await Promise.all([
         window.api.getSettings(),
         window.api.getWorks(),
         window.api.getSession(),
-        window.api.getOnlineFavs()
+        window.api.getOnlineFavs(),
+        window.api.getReadProgress()
       ])
       setSettings(settings)
       setExcluded(settings.excludedImageHashes)
       setWorks(works)
       restoreSession(session)
       useStore.getState().setOnlineFavs(onlineFavs)
+      useStore.getState().setReadProgressAll(progress)
     })()
   }, [setWorks, setSettings, restoreSession])
 

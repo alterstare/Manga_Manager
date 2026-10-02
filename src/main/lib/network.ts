@@ -30,8 +30,9 @@ export async function applyNetwork(s: Settings): Promise<void> {
 let tunnel: Tunnel | null = null
 
 async function applyTunnel(on: boolean): Promise<void> {
+  if (on === !!tunnel) return // unchanged — settings are saved often (zoom, mode…)
   const ses = session.fromPartition(TOKI_PARTITION)
-  if (on && !tunnel) {
+  if (on) {
     const t = new Tunnel({
       host: '127.0.0.1',
       port: 0,
@@ -48,7 +49,7 @@ async function applyTunnel(on: boolean): Promise<void> {
       console.warn('[tunnel] start failed — direct connection:', (e as Error).message)
       await t.stop().catch(() => {})
     }
-  } else if (!on && tunnel) {
+  } else if (tunnel) {
     await ses.setProxy({ mode: 'system' })
     await tunnel.stop().catch(() => {})
     tunnel = null

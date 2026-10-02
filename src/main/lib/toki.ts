@@ -202,6 +202,16 @@ const probe = async (w: BrowserWindow): Promise<Probe | null> => {
 const RETRY_CODES = new Set([-101])
 const MAX_RETRIES = 10
 const retryDelay = (n: number): number => Math.min(400 * n, 2000)
+// A connection can also stall — no reset, no data — leaving the page (or its
+// API calls) waiting forever. That's what toggling the bypass / pressing the
+// online button "fixed": both drop the session's sockets. So: no DOM within
+// STALL_MS, or a DOM whose content never arrives within CONTENT_STALL_MS,
+// counts as a failure → drop the pooled sockets and reload.
+const STALL = -1000 // synthetic failCode for a stalled load
+const STALL_MS = 15000
+const CONTENT_STALL_MS = 15000
+const dropConnections = (): Promise<void> =>
+  session.fromPartition(PARTITION).closeAllConnections().catch(() => {})
 
 async function ensure(url: string, needContent: boolean): Promise<void> {
   const w = getWindow()
@@ -223,17 +233,29 @@ async function ensure(url: string, needContent: boolean): Promise<void> {
   const load = async (): Promise<void> => {
     failCode = 0
     status(retries ? `연결이 끊겨 다시 시도하는 중… (${retries}/${MAX_RETRIES})` : '사이트에 연결하는 중…')
-    const domReady = new Promise<void>((r) => w.webContents.once('dom-ready', () => r()))
+    let gotDom = false
+    const domReady = new Promise<void>((r) =>
+      w.webContents.once('dom-ready', () => {
+        gotDom = true
+        r()
+      })
+    )
     nav = withTimeout(w.loadURL(url).then(() => undefined), 45000, undefined)
-    await Promise.race([domReady, nav])
+    await Promise.race([domReady, nav, delay(STALL_MS)])
+    if (!gotDom && !failCode) {
+      w.webContents.stop()
+      failCode = STALL
+    }
   }
   // Initial load, re-tried while the connection itself fails.
   await load()
   while (failCode && retries < MAX_RETRIES) {
     retries++
+    await dropConnections()
     await delay(retryDelay(retries))
     await load()
   }
+  let contentRetried = false
   let shown = false
   const start = Date.now()
   if (!failCode) status('페이지를 읽는 중…')
@@ -242,6 +264,7 @@ async function ensure(url: string, needContent: boolean): Promise<void> {
     // Connection reset after DOM-ready (late failure) → reload.
     if (failCode && retries < MAX_RETRIES) {
       retries++
+      await dropConnections()
       await delay(retryDelay(retries))
       await load()
       continue
@@ -266,6 +289,14 @@ async function ensure(url: string, needContent: boolean): Promise<void> {
     }
     if (p.ready) break
     if (!shown) status('페이지를 읽는 중…')
+    // Page is up but its content never arrives (stalled API call) → once per
+    // ensure, drop the sockets and reload.
+    if (needContent && !contentRetried && Date.now() - start > CONTENT_STALL_MS) {
+      contentRetried = true
+      await dropConnections()
+      await load()
+      continue
+    }
     // No content selector needed → done once the page has fully loaded.
     if (!needContent && (await Promise.race([nav.then(() => true), delay(0).then(() => false)]))) break
     if (!needContent && Date.now() - start > 8000) break
@@ -310,6 +341,8 @@ function listUrl(base: string, src: TokiListSource, page: number): string {
     // Author search matches the site's author links (exact); title = contains.
     u.searchParams.set('field', src.field === 'author' ? 'author' : 'title')
     u.searchParams.set('match', src.field === 'author' ? 'exact' : 'contains')
+    // Section filter: search otherwise mixes in novels and anime.
+    u.searchParams.set('kind', src.type === 'webtoon' ? 'webtoon' : 'manhwa')
   } else {
     if (src.genre && src.genre !== '전체') u.searchParams.set('g', src.genre)
     if (SORT_PARAM[src.sort]) u.searchParams.set('sort', SORT_PARAM[src.sort])
@@ -403,10 +436,12 @@ function listScript(genre: string, sortLabel: string, page: number): string {
     const img = a.querySelector('.thumb img:not(.platform-icon)') || a.querySelector('.thumb img')
     let thumb = img ? (img.getAttribute('data-src') || img.getAttribute('src')) : null
     if (thumb) thumb = abs(thumb)
-    const title = txt(a.querySelector('.info .subject')) || (img && img.alt) || txt(a)
+    const title = txt(a.querySelector('.subject')) || (img && img.alt) || txt(a)
     if (!title) continue
-    const genre = txt(a.querySelector('.info .genre')) || null
-    const chapter = txt(a.querySelector('.info .ep .ep-no')) || null
+    // Browse cards have .subject/.genre/.ep-no directly in the <a>; search
+    // cards wrap them in .info (episode count in .ep) — match both.
+    const genre = txt(a.querySelector('.genre')) || null
+    const chapter = txt(a.querySelector('.ep-no, .info .ep')) || null
     // Author isn't on the list card (only the series page) → artist stays null.
     seen.add(url); out.push({ url, title, thumb, artist: null, genre, chapter })
   }
@@ -625,26 +660,38 @@ function titleMatches(query: string, resultTitle: string): boolean {
   return a === b || a.includes(b) || b.includes(a)
 }
 
-// Run the title search over the query variants and return the first result that
-// both satisfies `pick` AND whose title matches the query (so we never accept an
-// arbitrary hit from a broad search).
+// Run the title search over the query variants and return a result that both
+// satisfies `pick` AND whose title matches the query (so we never accept an
+// arbitrary hit from a broad search). A result whose normalized title is
+// EXACTLY the query wins over one that merely contains it — otherwise a series
+// split by subtitle ("강철의 연금술사" / "… 외전" / "… 완전판") got whichever
+// variant the site listed first. Containment is only the fallback.
+const isComicUrl = (u: string): boolean => /\/(manhwa|webtoon)\//.test(u)
+
 async function firstMatch(
   base: string,
   title: string,
   pick: (it: TokiSummary) => boolean
 ): Promise<TokiSummary | null> {
-  // Search both manga AND webtoon listings — a webtoon's cover/author lives in the
-  // webtoon type, so a manga-only search never finds it (covers stayed empty).
+  const want = normTitle(title)
+  let loose: TokiSummary | null = null
+  // Search the manga section, then webtoon (search is filtered by kind=, see
+  // listUrl) — a webtoon's cover/author only shows up in the webtoon section.
+  // isComicUrl is a guard in case the site ignores the filter: anime/novel
+  // entries of the same name must never lend their cover/author.
   for (const q of titleQueries(title)) {
     for (const type of ['manga', 'webtoon'] as const) {
       const r = await tokiList(base, { genre: '전체', sort: 'date', type, query: q }, 0).catch(
         () => null
       )
-      const hit = r?.items.find((it) => pick(it) && titleMatches(title, it.title))
-      if (hit) return hit
+      const ok =
+        r?.items.filter((it) => isComicUrl(it.url) && pick(it) && titleMatches(title, it.title)) ?? []
+      const exact = ok.find((it) => normTitle(it.title) === want)
+      if (exact) return exact
+      loose ??= ok[0] ?? null
     }
   }
-  return null
+  return loose
 }
 
 // Best-guess author for a local work by its title: search → confirm the result
@@ -860,24 +907,38 @@ export async function tokiCoverForTitle(base: string, title: string): Promise<st
 
 // Fetch a toki image through the persistent session + site referer (a bare
 // <img> would get a 403). Used by the mangaimg://toki protocol host.
+const IMG_TIMEOUT_MS = 30000 // per attempt, headers + body
+class HttpError extends Error {}
+
 export async function fetchTokiBuffer(base: string, url: string): Promise<Buffer> {
   const ses = session.fromPartition(PARTITION)
-  // Same intermittent connection resets hit image requests → retry network
-  // errors (thrown) a few times; HTTP errors (403/404) fail immediately.
+  // A connection can also just stall (no reset, no data — seen on blocking
+  // ISPs, with or without the bypass tunnel): without a deadline the request
+  // waited forever and froze the download/reader until something dropped the
+  // session's connections. So each attempt (headers + body) gets a deadline,
+  // and network errors / timeouts are retried on a fresh connection; HTTP
+  // errors (403/404) fail immediately.
   for (let attempt = 0; ; attempt++) {
+    const ctl = new AbortController()
+    const timer = setTimeout(() => ctl.abort(), IMG_TIMEOUT_MS)
     let res: Response
     try {
       res = await ses.fetch(url, {
-        headers: { 'User-Agent': UA, Referer: base.replace(/\/+$/, '') + '/' }
+        headers: { 'User-Agent': UA, Referer: base.replace(/\/+$/, '') + '/' },
+        signal: ctl.signal
       })
+      if (!res.ok) {
+        clearTimeout(timer)
+        throw new HttpError(`toki img ${res.status}`)
+      }
+      const buf = Buffer.from(await res.arrayBuffer())
+      clearTimeout(timer)
+      return buf
     } catch (e) {
-      // Only connection resets are retried; anything else fails as before.
-      if (attempt >= 4 || !/ERR_CONNECTION_RESET/.test(String(e))) throw e
-      await delay(300 * (attempt + 1))
-      continue
+      clearTimeout(timer)
+      if (e instanceof HttpError || attempt >= 4) throw e
+      await delay(500 * (attempt + 1))
     }
-    if (!res.ok) throw new Error(`toki img ${res.status}`)
-    return Buffer.from(await res.arrayBuffer())
   }
 }
 
@@ -945,7 +1006,16 @@ export async function tokiDownloadSeries(
     signal?.throwIfAborted()
     const ch = chapters[i]
     onProgress(i, total, ch.title)
-    const urls = await tokiReadUrls(base, ch.url)
+    let urls = await tokiReadUrls(base, ch.url)
+    if (!urls.length) {
+      // Page didn't deliver its images (slow/stalled load) → load it once more
+      // from scratch before giving up on this chapter.
+      await queue(async () => {
+        await dropConnections()
+        await getWindow().loadURL('about:blank').catch(() => {})
+      })
+      urls = await tokiReadUrls(base, ch.url)
+    }
     if (!urls.length) continue
     // Folder = "<n>화 <subtitle>" (series name is only on the parent). The chapter
     // number sorts/merges subset & 이어서 downloads correctly on its own.

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { JSX } from 'react'
-import { useStore, useSeriesRoots } from '../store'
+import { useStore, useSeriesRoots, lastReadKey } from '../store'
 import { selectWorks, allTags, matchesSearch, analyzeSeries, seriesOf, tagToken, artistFolderOf, isOnlineTitleFav } from '../util'
 import type { SortMode, Work } from '../../../shared/types'
 import Thumb from './Thumb'
@@ -109,6 +109,8 @@ export default function LibraryList(): JSX.Element {
     () => (activeGroup ? analyzeSeries(list, activeGroup.title, scheme) : []),
     [activeGroup, list, scheme]
   )
+  const readProgress = useStore((s) => s.readProgress)
+  const lastId = useMemo(() => lastReadKey(readProgress, infos.map((ci) => ci.work.id)), [readProgress, infos])
 
   // Paginate the (unvirtualized) hitomi list so only PAGE_SIZE rows are in the
   // DOM at once — same idea as the online list. The general-manga series list is
@@ -228,6 +230,7 @@ export default function LibraryList(): JSX.Element {
                 key={ci.work.id}
                 info={ci}
                 active={ci.work.id === activeWorkId}
+                lastRead={ci.work.id === lastId}
                 // Chapter navigation swaps the work IN the current tab (like the
                 // online reader), instead of spawning a new tab per chapter.
                 onOpen={() =>

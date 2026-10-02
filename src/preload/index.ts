@@ -42,6 +42,8 @@ const api: Api = {
   },
   mergeFavorites: () => ipcRenderer.invoke(IPC.mergeFavorites),
   getOnlineFavs: () => ipcRenderer.invoke(IPC.getOnlineFavs),
+  getReadProgress: () => ipcRenderer.invoke(IPC.getReadProgress),
+  markRead: (key) => ipcRenderer.invoke(IPC.markRead, key),
   setOnlineFav: (code, patch, meta) => ipcRenderer.invoke(IPC.setOnlineFav, code, patch, meta),
   setFavoriteByCode: (code, fav, meta) => ipcRenderer.invoke(IPC.setFavoriteByCode, code, fav, meta),
   translateImage: (imageBase64, langHint, w, h) =>

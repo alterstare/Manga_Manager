@@ -52,6 +52,9 @@ export default function StyleSection(): JSX.Element {
 
       <section data-cat="style">
         <h2>뷰어 스타일</h2>
+        <SettingRow title="이어보기" desc="일반 만화 시리즈를 열면 1화 대신 마지막으로 본 화를 엽니다. 화 목록에서는 마지막으로 본 화가 보라색 테두리로 표시됩니다.">
+          <Toggle checked={draft.resumeReading !== false} onChange={(v) => patch({ resumeReading: v })} />
+        </SettingRow>
         <SettingRow title="스크롤 넘김에서 페이지 간격" desc="스크롤 감상 시 페이지 사이에 간격을 둡니다.">
           <Toggle checked={draft.readerPageGap} onChange={(v) => patch({ readerPageGap: v })} />
         </SettingRow>

@@ -1,5 +1,5 @@
 // IPC channel names + the shape of the API exposed to the renderer via preload.
-import type { Work, Settings, SessionState, ParsedName, HitomiMeta, OnlineFav, ScanProgress } from './types'
+import type { Work, Settings, SessionState, ParsedName, HitomiMeta, OnlineFav, ScanProgress, ReadProgress } from './types'
 
 export type OnlineSort = 'date' | 'today' | 'week' | 'month' | 'year'
 
@@ -72,6 +72,8 @@ export const IPC = {
   onlineFavPreloadProgress: 'fav:preloadProgress',
   mergeFavorites: 'fav:merge',
   getOnlineFavs: 'online:getFavs',
+  getReadProgress: 'progress:get',
+  markRead: 'progress:markRead',
   setOnlineFav: 'online:setFav',
   setFavoriteByCode: 'fav:setByCode',
   translateImage: 'translate:image',
@@ -244,6 +246,8 @@ export interface Api {
   mergeFavorites: () => Promise<{ ok: boolean; count: number; files: number; path?: string }>
   // Online (hitomi) favorites + ranks, keyed by gallery code.
   getOnlineFavs: () => Promise<OnlineFav[]>
+  getReadProgress: () => Promise<Record<string, ReadProgress>>
+  markRead: (key: string) => Promise<void>
   setOnlineFav: (
     code: string,
     patch: { favorite?: boolean; rank?: number },

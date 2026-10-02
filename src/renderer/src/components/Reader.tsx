@@ -58,6 +58,7 @@ export default function Reader({
   const spreadNextSide = useStore((s) => s.settings.spreadNextSide)
   const pagedFlipSide = useStore((s) => s.settings.pagedFlipSide)
   const setTabReader = useStore((s) => s.setTabReader)
+  const markRead = useStore((s) => s.markRead)
   // Which library this pane belongs to (toki online = general-manga). Used to
   // restore + remember the reader mode separately for hitomi vs general-manga.
   const libMode: 'hitomi' | 'normal' = paneOnline
@@ -414,6 +415,12 @@ export default function Reader({
     }
     requestAnimationFrame(pin)
   }, [images, mode, computeCurrentFromScroll])
+
+  // Remember which general-manga chapter was opened last (이어보기 / list mark).
+  const progKey = online ? online.code : work?.id
+  useEffect(() => {
+    if (libMode === 'normal' && progKey) markRead(progKey)
+  }, [libMode, progKey, markRead])
 
   useEffect(() => {
     if (mode !== 'scroll') return

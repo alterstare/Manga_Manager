@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import type { JSX, MouseEvent } from 'react'
 import type { SeriesGroup, ChapterInfo } from '../util'
 import { analyzeSeries, tagToken } from '../util'
-import { useStore } from '../store'
+import { useStore, lastReadKey } from '../store'
 import Thumb from './Thumb'
 import { ArtistLinks } from './ArtistLinks'
 import Stars from './Stars'
@@ -31,6 +31,8 @@ export default function SeriesCard({ series }: { series: SeriesGroup }): JSX.Ele
   const [open, setOpen] = useState(false)
   const [confirmDel, setConfirmDel] = useState(false)
   const infos = useMemo(() => analyzeSeries(chapters, series.title, scheme), [chapters, series.title, scheme])
+  const readProgress = useStore((s) => s.readProgress)
+  const lastId = useMemo(() => lastReadKey(readProgress, chapters.map((w) => w.id)), [readProgress, chapters])
 
   const deleteSeries = async (): Promise<void> => {
     setConfirmDel(false)
@@ -123,7 +125,7 @@ export default function SeriesCard({ series }: { series: SeriesGroup }): JSX.Ele
       {open && (
         <div className="chapter-table">
           {infos.map((ci) => (
-            <ChapterRow key={ci.work.id} info={ci} onOpen={() => openTab(ci.work.id)} />
+            <ChapterRow key={ci.work.id} info={ci} lastRead={ci.work.id === lastId} onOpen={() => openTab(ci.work.id)} />
           ))}
         </div>
       )}
@@ -155,11 +157,13 @@ export function ChapterRow({
   info,
   onOpen,
   active,
+  lastRead,
   onContextMenu
 }: {
   info: ChapterInfo
   onOpen: () => void
   active?: boolean
+  lastRead?: boolean // the series' most recently read chapter → purple outline
   onContextMenu?: (e: MouseEvent) => void
 }): JSX.Element {
   const work = info.work
@@ -183,7 +187,8 @@ export function ChapterRow({
 
   return (
     <div
-      className={`chapter-row ${active ? 'active' : ''}`}
+      className={`chapter-row ${active ? 'active' : ''} ${lastRead ? 'last-read' : ''}`}
+      title={lastRead ? '마지막으로 본 화' : undefined}
       onClick={onOpen}
       onContextMenu={onContextMenu}
     >

@@ -2030,6 +2030,11 @@ body.resizing {
 .chapter-row.active {
   background: rgba(113, 50, 245, 0.16);
 }
+/* The series' last-read chapter (store.readProgress) — "read up to here". */
+.chapter-row.last-read {
+  box-shadow: inset 0 0 0 2px var(--accent);
+  border-radius: var(--r4);
+}
 .chapter-line {
   display: flex;
   align-items: center;
@@ -4869,4 +4874,19 @@ select:focus,
 .lib-search-row .search-clear svg {
   width: 14px;
   height: 14px;
+}
+
+/* Genre chip excluded via right-click (TokiBrowse) — cards with it are hidden. */
+.tag.excluded {
+  color: var(--danger);
+  border-color: var(--danger);
+  text-decoration: line-through;
+}
+.genre-ex-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-left: 4px;
 }

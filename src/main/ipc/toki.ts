@@ -36,10 +36,14 @@ function normalDestRoot(): string {
 // Register a freshly downloaded series folder as general-manga works (the
 // 'normal' stamp is forced regardless of where the folder sits).
 async function importDownloaded(dir: string, artist?: string | null): Promise<Work[]> {
-  let merged = store.mergeScanPartial(await scanRoot(dir, store.settings, 'normal'))
-  if (artist) merged = merged.map((w) => store.update(w.id, { artist }) ?? w)
+  const scanned = await scanRoot(dir, store.settings, 'normal')
+  const merged = store.mergeScanPartial(scanned)
+  // The artist belongs to THIS series only. mergeScanPartial returns the whole
+  // library, so stamping its result overwrote every work's artist (hitomi
+  // included) with the downloaded series' author.
+  if (artist) for (const w of scanned) store.update(w.id, { artist })
   await store.flushWorks()
-  return merged
+  return artist ? [...store.works.values()] : merged
 }
 
 // Download a toki series (all chapters, or only `chapterUrls`).

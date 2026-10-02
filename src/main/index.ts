@@ -201,5 +201,6 @@ app.on('will-quit', () => globalShortcut.unregisterAll())
 
 app.on('window-all-closed', async () => {
   await store.flushWorks()
+  await store.flushProgress()
   if (process.platform !== 'darwin') app.quit()
 })

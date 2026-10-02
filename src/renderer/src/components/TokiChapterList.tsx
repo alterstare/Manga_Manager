@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { JSX } from 'react'
-import { useStore } from '../store'
+import { useStore, lastReadKey } from '../store'
 import { getTokiChapters } from '../toki'
 import type { TokiChapter } from '../../../shared/ipc'
 import type { OnlineFav } from '../../../shared/types'
@@ -59,6 +59,8 @@ export default function TokiChapterList(): JSX.Element {
   const apply = (): void => setApplied(input.trim())
   const q = applied.toLowerCase()
   const list = q ? chapters.filter((c) => c.title.toLowerCase().includes(q)) : chapters
+  const readProgress = useStore((s) => s.readProgress)
+  const lastUrl = useMemo(() => lastReadKey(readProgress, chapters.map((c) => c.url)), [readProgress, chapters])
 
   return (
     <div className="lib-list">
@@ -107,7 +109,7 @@ export default function TokiChapterList(): JSX.Element {
           return (
             <div
               key={c.url}
-              className={`chapter-row ${c.url === online?.code ? 'active' : ''}`}
+              className={`chapter-row ${c.url === online?.code ? 'active' : ''} ${c.url === lastUrl ? 'last-read' : ''}`}
               onClick={() =>
                 active &&
                 replaceTabOnline(active.id, {

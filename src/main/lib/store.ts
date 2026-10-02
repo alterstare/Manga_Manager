@@ -2,7 +2,7 @@ import { app } from 'electron'
 import { createHash } from 'crypto'
 import { promises as fs } from 'fs'
 import { join } from 'path'
-import type { Work, Settings, SessionState, OnlineFav } from '../../shared/types'
+import type { Work, Settings, SessionState, OnlineFav, ReadProgress } from '../../shared/types'
 import type { TransBlock } from '../../shared/ipc'
 import { DEFAULT_SETTINGS } from '../../shared/types'
 import { isUnder } from './favorites'
@@ -23,6 +23,8 @@ export function deriveId(folderName: string, code: string | null, uniqueKey?: st
   return `u:${h}`
 }
 
+const PROGRESS_MAX = 5000
+
 interface PersistShape {
   works: Work[]
 }
@@ -34,12 +36,17 @@ export class Store {
   private sessionFile: string
   private onlineFile: string
   private transEditsFile: string
+  private progressFile: string
 
   works = new Map<string, Work>()
   settings: Settings = { ...DEFAULT_SETTINGS }
   session: SessionState = { tabs: [], activeTabId: null }
   onlineFavs = new Map<string, OnlineFav>()
   transEdits: Record<string, TransBlock[]> = {}
+  // General-manga chapters (local work id or toki chapter url) → when last
+  // opened. Drives 이어보기 and the "read up to here" mark.
+  readProgress: Record<string, ReadProgress> = {}
+  private progressTimer: NodeJS.Timeout | null = null
 
   private saveTimer: NodeJS.Timeout | null = null
 
@@ -50,6 +57,7 @@ export class Store {
     this.sessionFile = join(this.dir, 'session.json')
     this.onlineFile = join(this.dir, 'online.json')
     this.transEditsFile = join(this.dir, 'translationEdits.json')
+    this.progressFile = join(this.dir, 'progress.json')
   }
 
   async load(): Promise<void> {
@@ -64,6 +72,28 @@ export class Store {
     const ofavs = await readJson<{ favs: OnlineFav[] }>(this.onlineFile, { favs: [] })
     this.onlineFavs = new Map(ofavs.favs.map((f) => [f.code, f]))
     this.transEdits = await readJson<Record<string, TransBlock[]>>(this.transEditsFile, {})
+    this.readProgress = await readJson<Record<string, ReadProgress>>(this.progressFile, {})
+  }
+
+  // Record that a chapter was opened. File write debounced; capped to the most
+  // recent PROGRESS_MAX chapters.
+  markRead(key: string): void {
+    this.readProgress[key] = { at: Date.now() }
+    if (this.progressTimer) clearTimeout(this.progressTimer)
+    this.progressTimer = setTimeout(() => void this.flushProgress(), 1000)
+  }
+
+  async flushProgress(): Promise<void> {
+    if (this.progressTimer) clearTimeout(this.progressTimer)
+    this.progressTimer = null
+    const keys = Object.keys(this.readProgress)
+    if (keys.length > PROGRESS_MAX) {
+      keys
+        .sort((a, b) => this.readProgress[a].at - this.readProgress[b].at)
+        .slice(0, keys.length - PROGRESS_MAX)
+        .forEach((k) => delete this.readProgress[k])
+    }
+    await writeJson(this.progressFile, this.readProgress)
   }
 
   // Persist one page's manually edited translation blocks (keyed by image src).
