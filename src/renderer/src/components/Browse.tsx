@@ -315,7 +315,7 @@ export default function Browse(): JSX.Element {
                 return p ? `${p}, ${fav}` : fav
               })
             }}
-            placeholder="제목, 코드, 태그, artist:작가명 / tag:태그명 으로 검색 후 Enter"
+            placeholder="검색 후 Enter"
           />
           <button className="btn primary" onClick={() => runSearch()} title="검색">
             <SearchIcon />

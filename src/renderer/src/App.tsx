@@ -21,6 +21,7 @@ import ConfirmModal from './components/ConfirmModal'
 import Tooltip from './components/Tooltip'
 import EditContextMenu from './components/EditContextMenu'
 import { startExitAnimations } from './exitAnimations'
+import { comboFromEvent, shortcutCombos, type ShortcutId } from '../../shared/shortcuts'
 import { setExcluded } from './exclude'
 
 export default function App(): JSX.Element {
@@ -158,56 +159,47 @@ export default function App(): JSX.Element {
     }
     const onKey = (e: KeyboardEvent): void => {
       const st = useStore.getState()
-      const mod = e.ctrlKey || e.metaKey
-      if ((mod && !e.altKey && e.code === 'KeyK') || (e.altKey && !mod && e.code === 'KeyD')) {
-        // Ctrl+K / Alt+D — jump to the search box (select its text). e.code so
-        // it works with the Korean IME on.
-        if (focusSearch()) e.preventDefault()
-      } else if (mod && !e.altKey && !e.shiftKey && e.code === 'KeyG') {
-        // Ctrl+G — switch library mode (동인지 ⇄ 일반 만화), like the menu button.
-        e.preventDefault()
-        st.setLibraryMode(st.libraryMode === 'normal' ? 'hitomi' : 'normal')
-      } else if (e.altKey && e.key === 'ArrowLeft') {
-        e.preventDefault()
-        back()
-      } else if (e.altKey && e.key === 'ArrowRight') {
-        e.preventDefault()
-        forward()
-      } else if (mod && e.shiftKey && e.key.toLowerCase() === 't') {
-        // Ctrl+Shift+T — reopen last closed tab.
-        e.preventDefault()
-        st.reopenClosedTab()
-      } else if (mod && e.key.toLowerCase() === 'w') {
-        // Ctrl+W — close current tab (with the same collapse animation).
-        e.preventDefault()
-        if (st.activeTabId) st.requestCloseTab(st.activeTabId)
-      } else if (mod && e.key === 'Tab') {
-        // Ctrl+Tab / Ctrl+Shift+Tab — cycle tabs.
-        e.preventDefault()
+      const combo = comboFromEvent(e)
+      if (!combo) return
+      const is = (id: ShortcutId): boolean => shortcutCombos(st.settings.shortcuts, id).includes(combo)
+      // Combos are user-editable (설정 › 단축키); defaults in shared/shortcuts.ts.
+      const goTab = (n: number): void => {
         const list = st.tabs.filter((t) => !t.glance)
-        if (list.length > 1) {
-          const i = list.findIndex((t) => t.id === st.activeTabId)
-          const n = e.shiftKey ? (i - 1 + list.length) % list.length : (i + 1) % list.length
-          st.activateTab(list[n].id)
-        }
-      } else if (mod && e.key === '1') {
-        // Ctrl+1 — local library (home list).
-        e.preventDefault()
-        st.goHome()
-      } else if (mod && e.key === '2') {
-        // Ctrl+2 — online library (browse).
-        e.preventDefault()
-        st.goBrowse()
-      } else if (mod && /^[3-9]$/.test(e.key)) {
-        // Ctrl+3..9 — jump to the Nth tab (9 = last).
-        e.preventDefault()
+        const t = n < 0 ? list[list.length - 1] : list[n]
+        if (t) st.activateTab(t.id)
+      }
+      const actions: [ShortcutId, () => void][] = [
+        ['focusSearch', () => focusSearch()],
+        ['switchMode', () => st.setLibraryMode(st.libraryMode === 'normal' ? 'hitomi' : 'normal')],
+        ['navBack', back],
+        ['navForward', forward],
+        ['reopenTab', () => st.reopenClosedTab()],
+        ['closeTab', () => st.activeTabId && st.requestCloseTab(st.activeTabId)],
+        ['nextTab', () => cycleTab(1)],
+        ['prevTab', () => cycleTab(-1)],
+        ['goLibrary', () => st.goHome()],
+        ['goOnline', () => st.goBrowse()],
+        // Ctrl+1/2 are the 라이브러리/온라인 buttons, so content tabs start at 3.
+        ['tab3', () => goTab(0)],
+        ['tab4', () => goTab(1)],
+        ['tab5', () => goTab(2)],
+        ['tab6', () => goTab(3)],
+        ['tab7', () => goTab(4)],
+        ['tab8', () => goTab(5)],
+        ['tabLast', () => goTab(-1)],
+        ['reload', () => window.location.reload()]
+      ]
+      function cycleTab(dir: 1 | -1): void {
         const list = st.tabs.filter((t) => !t.glance)
-        const n = e.key === '9' ? list.length - 1 : Number(e.key) - 1
-        if (list[n]) st.activateTab(list[n].id)
-      } else if (e.key === 'F5') {
-        // F5 — plain reload (like a browser); session is restored on load.
+        if (list.length < 2) return
+        const i = list.findIndex((t) => t.id === st.activeTabId)
+        st.activateTab(list[(i + dir + list.length) % list.length].id)
+      }
+      for (const [id, run] of actions) {
+        if (!is(id)) continue
         e.preventDefault()
-        window.location.reload()
+        run()
+        return
       }
     }
     window.addEventListener('mouseup', onMouse)

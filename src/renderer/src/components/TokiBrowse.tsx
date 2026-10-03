@@ -15,6 +15,7 @@ import Pager from './Pager'
 import { groupSeries, titleKey, isTokiCode } from '../util'
 import { useTokiStatus } from './useTokiStatus'
 import SearchClear from './SearchClear'
+import Dropdown from './Dropdown'
 
 const SORTS: [TokiSort, string][] = [
   ['date', '최신순'],
@@ -302,36 +303,31 @@ export default function TokiBrowse(): JSX.Element {
         <h1>일반 만화 온라인</h1>
 
         <div className="search-row">
-          <select
-            className="sort"
+          <Dropdown<TokiSort>
+            className="field"
             value={sort}
-            onChange={(e) => {
-              const v = e.target.value as TokiSort
+            onChange={(v) => {
               setSort(v)
               applySource({ sort: v })
             }}
-          >
-            {SORTS.map(([v, l]) => (
-              <option key={v} value={v}>
-                {l}
-              </option>
-            ))}
-          </select>
-          <select
-            className="sort"
+            options={SORTS}
+          />
+          <Dropdown<'title' | 'author'>
+            className="field"
             value={field}
-            onChange={(e) => setField(e.target.value as 'title' | 'author')}
-          >
-            <option value="title">제목</option>
-            <option value="author">작가</option>
-          </select>
+            onChange={setField}
+            options={[
+              ['title', '제목'],
+              ['author', '작가']
+            ]}
+          />
           <div className="search-ac">
             <input
               className="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && run()}
-              placeholder={field === 'author' ? '작가 검색 후 Enter' : '제목 검색 후 Enter (비우면 둘러보기)'}
+              placeholder="검색 후 Enter"
             />
             <SearchClear value={query} onClear={() => setQuery('')} />
           </div>

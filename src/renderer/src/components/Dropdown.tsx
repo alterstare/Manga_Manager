@@ -10,7 +10,8 @@ export default function Dropdown<T extends string>({
   options,
   onChange,
   className = '',
-  chip = false
+  chip = false,
+  mini = false
 }: {
   value: T
   options: readonly (readonly [T, string])[]
@@ -18,6 +19,8 @@ export default function Dropdown<T extends string>({
   className?: string
   // Render the button as a toolbar chip (like 작품 분류 ▾) instead of a field.
   chip?: boolean
+  // Render the button as a small .mini button (reader sidebar), panel opens leftward.
+  mini?: boolean
 }): JSX.Element {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -34,7 +37,11 @@ export default function Dropdown<T extends string>({
 
   return (
     <div className={`dropdown ${className}`} ref={ref}>
-      {chip ? (
+      {mini ? (
+        <button type="button" className="mini dd-mini" onClick={() => setOpen((o) => !o)}>
+          {label} <span className={`dt ${open ? 'up' : ''}`} />
+        </button>
+      ) : chip ? (
         <button type="button" className="chip" onClick={() => setOpen((o) => !o)}>
           {label} <span className={`dt ${open ? 'up' : ''}`} />
         </button>

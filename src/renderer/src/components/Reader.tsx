@@ -18,11 +18,12 @@ import type { FitMode } from '../../../shared/types'
 import { filterExcluded, getExcluded, hasExclusions } from '../exclude'
 import { langCategory } from '../../../shared/lang'
 import TranslatedImage from './TranslatedImage'
-import { DownloadIcon } from './icons'
 import { FIT_TEXT, FIT_ICON, FIT_ORDER, SCROLL_FIT_ORDER, fitStyle, fitHeight } from './reader/fit'
 import { prefetchOrdered } from './reader/prefetch'
 import PageSlot from './reader/PageSlot'
 import { useTokiStatus } from './useTokiStatus'
+import { comboFromEvent, shortcutCombos } from '../../../shared/shortcuts'
+import { DownloadIcon, ScrollModeIcon, PageModeIcon, SpreadModeIcon, TranslateIcon, ArrowBackIcon, FolderOpenIcon, CheckMarkIcon } from './icons'
 
 // (tab, pane, work) combos whose view was already counted this session, so a
 // re-render / remount of the same open work doesn't bump viewCount again.
@@ -625,8 +626,11 @@ export default function Reader({
       const t = e.target as HTMLElement
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return
       const step = mode === 'spread' ? 2 : 1
-      if (e.key === 'ArrowRight' || e.key === 'PageDown') goToPage(pageIdx + step)
-      else if (e.key === 'ArrowLeft' || e.key === 'PageUp') goToPage(pageIdx - step)
+      const combo = comboFromEvent(e)
+      if (!combo) return
+      const keys = useStore.getState().settings.shortcuts
+      if (shortcutCombos(keys, 'nextPage').includes(combo)) goToPage(pageIdx + step)
+      else if (shortcutCombos(keys, 'prevPage').includes(combo)) goToPage(pageIdx - step)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -686,8 +690,8 @@ export default function Reader({
     <div className="reader-wrap">
       <div className="reader-head">
         {side === 'left' && (
-          <button className="mini reader-back" onClick={goBack}>
-            ‹ 목록
+          <button className="mini icon reader-back" onClick={goBack} title="목록">
+            <ArrowBackIcon />
           </button>
         )}
         <h2>{title}</h2>
@@ -721,30 +725,35 @@ export default function Reader({
           })()}
         {online && <span className="online-badge">ONLINE</span>}
         <span className="reader-pages">{images.length}p</span>
-        {online && online.kind !== 'toki' ? (
-          <button
-            className={`mini ${dlDone ? 'dl-ok' : ''}`}
-            onClick={download}
-            disabled={downloading || dlDone}
-          >
-            {downloading ? '다운로드 중…' : dlDone ? '✓ 완료' : <><DownloadIcon /> 다운로드</>}
-          </button>
-        ) : online && online.kind === 'toki' && online.seriesUrl ? (
-          <button
-            className={`mini ${dlDone ? 'dl-ok' : ''}`}
-            onClick={downloadToki}
-            disabled={downloading || dlDone}
-            title="다운로드"
-          >
-            {downloading ? '다운로드 중…' : dlDone ? '✓ 완료' : <><DownloadIcon /> 전체 다운로드</>}
-          </button>
-        ) : (
-          work && (
-            <button className="mini" onClick={() => window.api.openInExplorer(work.id)}>
-              폴더 열기
+        {/* Icon buttons, flat group (default design). Download shows its state
+            in the icon: arrow → (busy, dimmed) → check when done. */}
+        <span className="flat-group reader-head-btns">
+          {online && online.kind !== 'toki' ? (
+            <button
+              className={`mini icon ${dlDone ? 'dl-ok' : ''} ${downloading ? 'busy' : ''}`}
+              onClick={download}
+              disabled={downloading || dlDone}
+              title={downloading ? '다운로드 중…' : dlDone ? '다운로드 완료' : '다운로드'}
+            >
+              {dlDone ? <CheckMarkIcon /> : <DownloadIcon />}
             </button>
-          )
-        )}
+          ) : online && online.kind === 'toki' && online.seriesUrl ? (
+            <button
+              className={`mini icon ${dlDone ? 'dl-ok' : ''} ${downloading ? 'busy' : ''}`}
+              onClick={downloadToki}
+              disabled={downloading || dlDone}
+              title={downloading ? '다운로드 중…' : dlDone ? '다운로드 완료' : '전체 다운로드'}
+            >
+              {dlDone ? <CheckMarkIcon /> : <DownloadIcon />}
+            </button>
+          ) : (
+            work && (
+              <button className="mini icon" onClick={() => window.api.openInExplorer(work.id)} title="폴더 열기">
+                <FolderOpenIcon />
+              </button>
+            )
+          )}
+        </span>
       </div>
 
       {loadingImgs && <div className="reader-loading">{(online?.kind === 'toki' && tokiStatus) || '이미지 로딩 중…'}</div>}
@@ -911,26 +920,46 @@ export default function Reader({
           <span className="page-label">
             {pageIdx + 1} / {images.length}
           </span>
-          <button
-            className="mini mode-toggle"
-            onClick={() => setMode(mode === 'scroll' ? 'paged' : mode === 'paged' ? 'spread' : 'scroll')}
-          >
-            {mode === 'scroll' ? '⤓ 스크롤' : mode === 'paged' ? '❐ 클릭넘김' : '⊞ 두 쪽'}
-          </button>
-          <button
-            className="mini zoom-btn"
-            onClick={onZoomButton}
-          >
-            {atFit ? <>{FIT_ICON[fit]} {FIT_TEXT[fit]}</> : `${Math.round(zoom * 100)}%`}
-          </button>
-          {canTranslate && (
+          {/* Flat button group (default design): no outline, dividers between. */}
+          <span className="flat-group reader-btns">
             <button
-              className={`mini ${translate ? 'on' : ''}`}
-              onClick={() => setTranslate((v) => !v)}
+              className="mini mode-toggle"
+              onClick={() => setMode(mode === 'scroll' ? 'paged' : mode === 'paged' ? 'spread' : 'scroll')}
             >
-              {translate ? '번역 끄기' : '번역'}
+              {mode === 'scroll' ? (
+                <>
+                  <ScrollModeIcon />
+                  <span className="btn-label">스크롤</span>
+                </>
+              ) : mode === 'paged' ? (
+                <>
+                  <PageModeIcon />
+                  <span className="btn-label">한 페이지</span>
+                </>
+              ) : (
+                <>
+                  <SpreadModeIcon />
+                  <span className="btn-label">두 페이지</span>
+                </>
+              )}
             </button>
-          )}
+            <button className="mini zoom-btn" onClick={onZoomButton}>
+              {atFit ? (
+                <>
+                  {FIT_ICON[fit]}
+                  <span className="btn-label">{FIT_TEXT[fit]}</span>
+                </>
+              ) : (
+                <span className="btn-label">{Math.round(zoom * 100)}%</span>
+              )}
+            </button>
+            {canTranslate && (
+              <button className={`mini tr-btn ${translate ? 'on' : ''}`} onClick={() => setTranslate((v) => !v)}>
+                <TranslateIcon />
+                <span className="btn-label">{translate ? '번역 끄기' : '번역'}</span>
+              </button>
+            )}
+          </span>
         </div>
       )}
     </div>

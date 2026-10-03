@@ -1,7 +1,7 @@
 // IPC channel names + the shape of the API exposed to the renderer via preload.
 import type { Work, Settings, SessionState, ParsedName, HitomiMeta, OnlineFav, ScanProgress, ReadProgress } from './types'
 
-export type OnlineSort = 'date' | 'today' | 'week' | 'month' | 'year'
+export type OnlineSort = 'date' | 'today' | 'week' | 'month' | 'year' | 'random'
 
 // Ordering for search results. 'date' = nozomi order (newest first);
 // 'popular' = reorder by site popularity (year).
@@ -72,6 +72,9 @@ export const IPC = {
   preloadOnlineFavLists: 'fav:preloadOnline',
   onlineFavPreloadProgress: 'fav:preloadProgress',
   mergeFavorites: 'fav:merge',
+  exportRatings: 'ratings:export',
+  importRatings: 'ratings:import',
+  mergeRatings: 'ratings:merge',
   getOnlineFavs: 'online:getFavs',
   getReadProgress: 'progress:get',
   markRead: 'progress:markRead',
@@ -248,6 +251,10 @@ export interface Api {
   onOnlineFavPreload: (cb: (p: { done: number; total: number }) => void) => () => void
   // Merge 2+ favorite files into one new file (union); no library change.
   mergeFavorites: () => Promise<{ ok: boolean; count: number; files: number; path?: string }>
+  // Rating files, per library mode (동인지 / 일반 만화 kept separate).
+  exportRatings: (lib: 'hitomi' | 'normal') => Promise<{ ok: boolean; count: number; path?: string }>
+  importRatings: (lib: 'hitomi' | 'normal') => Promise<{ ok: boolean; applied: number; total: number }>
+  mergeRatings: (lib: 'hitomi' | 'normal') => Promise<{ ok: boolean; count: number; files: number; path?: string }>
   // Online (doujin) favorites + ranks, keyed by gallery code.
   getOnlineFavs: () => Promise<OnlineFav[]>
   getReadProgress: () => Promise<Record<string, ReadProgress>>

@@ -444,7 +444,7 @@ export default function Home(): JSX.Element {
             onChange={setQuery}
             onEnter={() => setSearch(query.trim())}
             tokens={libTokens}
-            placeholder={normal ? '시리즈 제목·태그 검색 후 Enter' : '제목, 코드, 태그, artist:작가명 / tag:태그명 으로 검색 후 Enter'}
+            placeholder="검색 후 Enter"
           />
           <button className="btn primary" onClick={() => setSearch(query.trim())} title="검색">
             <SearchIcon />

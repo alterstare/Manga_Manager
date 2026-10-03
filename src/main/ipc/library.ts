@@ -16,6 +16,7 @@ import { organizeByLanguage } from '../lib/organize'
 import { translateImage, translateTexts } from '../lib/translate'
 import { sanitize } from '../lib/hitomi'
 import { applyNetwork } from '../lib/network'
+import { applyQuitShortcut } from '../lib/quitShortcut'
 import { encodeImg, thumbFile, isRawThumb } from '../lib/media'
 
 const allWorks = (): Work[] => [...store.works.values()]
@@ -66,6 +67,7 @@ export function registerLibraryIpc(): void {
   ipcMain.handle(IPC.saveSettings, async (_e, s: Settings) => {
     const saved = await store.saveSettings(s)
     await applyNetwork(saved)
+    applyQuitShortcut(saved) // 설정 › 단축키 › 강제 종료
     nativeTheme.themeSource = saved.theme // keep the OS caption in sync with the app theme
     return saved
   })

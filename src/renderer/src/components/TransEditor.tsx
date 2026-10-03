@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import type { JSX } from 'react'
 import type { TransBlock } from '../../../shared/ipc'
 import { loadImage, drawTranslation, canvasSize, autoBgHex } from '../inpaint'
+import { comboFromEvent, shortcutCombos } from '../../../shared/shortcuts'
+import { useStore } from '../store'
 
 // Photoshop-lite bubble editor for one translated page. Two jobs only:
 //   1) resize/move each translation bubble box (corner + body drag) and recolour
@@ -249,12 +251,13 @@ export default function TransEditor({
   // stale closure from an empty-deps effect is fine.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (!(e.ctrlKey || e.metaKey)) return
-      const k = e.key.toLowerCase()
-      if (k === 'z' && !e.shiftKey) {
+      const combo = comboFromEvent(e)
+      if (!combo) return
+      const keys = useStore.getState().settings.shortcuts
+      if (shortcutCombos(keys, 'transUndo').includes(combo)) {
         e.preventDefault()
         undo()
-      } else if ((k === 'z' && e.shiftKey) || k === 'y') {
+      } else if (shortcutCombos(keys, 'transRedo').includes(combo)) {
         e.preventDefault()
         redo()
       }

@@ -3,6 +3,7 @@ import type { JSX } from 'react'
 import { createPortal } from 'react-dom'
 import { useStore } from '../store'
 import Reader from './Reader'
+import { MaximizeIcon, CloseIcon, NoteStackIcon } from './icons'
 
 // Zen-style "Glance" peek: shows a work/online gallery in a floating reader over
 // the current view without creating a real tab. Esc or a backdrop click closes it;
@@ -37,13 +38,15 @@ export default function GlanceOverlay(): JSX.Element | null {
     >
       <div className="glance-window" onMouseDown={(e) => e.stopPropagation()}>
         <div className="glance-bar">
-          <span className="glance-title">미리보기</span>
-          <div className="glance-actions">
-            <button className="mini" onClick={promoteGlance}>
-              새 탭으로 열기
+          <span className="glance-title">
+            <NoteStackIcon /> Overview
+          </span>
+          <div className="glance-actions flat-group">
+            <button className="mini icon" onClick={promoteGlance} title="새 탭으로 열기">
+              <MaximizeIcon />
             </button>
-            <button className="mini" onClick={closeGlance}>
-              닫기 (Esc)
+            <button className="mini icon" onClick={closeGlance} title="닫기 (Esc)">
+              <CloseIcon />
             </button>
           </div>
         </div>

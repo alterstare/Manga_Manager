@@ -62,6 +62,26 @@ async function enrichOne(workId: string): Promise<Work> {
 let enrichRunning = false
 let enrichCancel = false
 
+// 랜덤 (sidebar sort): a random page of the latest index, shuffled. Every call
+// (page change / refresh) rolls a new one; the total stays the index size so
+// the pager keeps working.
+async function randomIndexPage(
+  language: string | null,
+  pageSize: number,
+  exclude: string[]
+): Promise<{ ids: number[]; total: number }> {
+  const first = await fetchNozomiExcluding({ kind: 'index', language }, 0, pageSize, exclude)
+  const pages = Math.max(1, Math.ceil(first.total / pageSize))
+  const p = Math.floor(Math.random() * pages)
+  const pick = p === 0 ? first : await fetchNozomiExcluding({ kind: 'index', language }, p, pageSize, exclude)
+  const ids = [...pick.ids]
+  for (let i = ids.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[ids[i], ids[j]] = [ids[j], ids[i]]
+  }
+  return { ids, total: first.total }
+}
+
 export function registerHitomiIpc(): void {
   ipcMain.handle(IPC.hitomiPing, () => pingHitomi())
   ipcMain.handle(IPC.hitomiPopularRanks, (_e, codes: string[]) => popularRanks(codes))
@@ -94,8 +114,10 @@ export function registerHitomiIpc(): void {
             pageSize,
             source.sort ?? 'date'
           )
-        : // Browse (latest / popular) also honors 설정 › 검색 제외 태그.
-          await fetchNozomiExcluding(source, page, pageSize, store.settings.onlineExcludeTags ?? [])
+        : source.sort === 'random'
+          ? await randomIndexPage(source.language, pageSize, store.settings.onlineExcludeTags ?? [])
+          : // Browse (latest / popular) also honors 설정 › 검색 제외 태그.
+            await fetchNozomiExcluding(source, page, pageSize, store.settings.onlineExcludeTags ?? [])
     // Fetch summaries 6 at a time; unreachable galleries are dropped.
     const items: GallerySummary[] = []
     for (let i = 0; i < ids.length; i += 6) {

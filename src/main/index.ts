@@ -19,6 +19,7 @@ import { registerLibraryIpc } from './ipc/library'
 import { registerFavoritesIpc } from './ipc/favorites'
 import { registerHitomiIpc } from './ipc/hitomi'
 import { registerTokiIpc } from './ipc/toki'
+import { applyQuitShortcut } from './lib/quitShortcut'
 
 // Privileged schemes must be registered before the app is ready.
 registerImageScheme()
@@ -180,7 +181,7 @@ app.whenReady().then(async () => {
 
   // Emergency force-quit that works even when the renderer is a black screen
   // (no DOM key events reach the app then): hard-exits, bypassing close vetoes.
-  globalShortcut.register('CommandOrControl+Shift+Q', () => app.exit(0))
+  applyQuitShortcut(store.settings)
 
   // Cloudflare check window shown/cleared → "인증 필요" banner in the renderer.
   setTokiChallengeHandler((active) => sendToRenderer(IPC.tokiChallenge, active))
@@ -204,3 +205,4 @@ app.on('window-all-closed', async () => {
   await store.flushProgress()
   if (process.platform !== 'darwin') app.quit()
 })
+

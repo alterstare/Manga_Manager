@@ -5,6 +5,7 @@
   --head-bg: rgba(255, 255, 255, 0.9); /* sticky reader header (glass) */
   --hover-veil: rgba(0, 0, 0, 0.06); /* uniform hover lift over any bg (light) */
   --press-veil: rgba(0, 0, 0, 0.13); /* stronger veil on click (light) */
+  --press-filter: brightness(0.9); /* whole-card press feedback (light: darker) */
   --bg-2: #f0f1f5; /* subtle raised / hover */
   --bg-3: #e7e9f0; /* deeper fill / thumbnails */
   --tab-active: #e2e4ea; /* active tab fill — darker/emphasized (light) */
@@ -45,6 +46,7 @@
   --head-bg: rgba(12, 14, 18, 0.92); /* sticky reader header (glass) */
   --hover-veil: rgba(255, 255, 255, 0.09); /* uniform hover lift over any bg (dark) */
   --press-veil: rgba(255, 255, 255, 0.18); /* stronger veil on click (dark) */
+  --press-filter: brightness(1.18); /* whole-card press feedback (dark: brighter) */
   --bg-2: #1b1e27;
   --bg-3: #262a35;
   --tab-active: #333a49; /* active tab fill — clearly lighter than the bar (dark) */
@@ -1238,6 +1240,7 @@ input[type='checkbox']:checked::after {
 .settings-inner[data-show='style'] section:not([data-cat='style']),
 .settings-inner[data-show='translate'] section:not([data-cat='translate']),
 .settings-inner[data-show='network'] section:not([data-cat='network']),
+.settings-inner[data-show='keys'] section:not([data-cat='keys']),
 .settings-inner[data-show='manage'] section:not([data-cat='manage']) {
   display: none;
 }
@@ -5407,4 +5410,379 @@ input,
 textarea {
   -webkit-user-select: text;
   user-select: text;
+}
+
+/* Settings search (Settings.tsx): box above the tabs; while searching the
+   tabs are dimmed, every category shows, non-matching settings hide
+   (.srch-hide) and the matched text is highlighted. */
+.settings-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 4px;
+  color: var(--text-dim);
+}
+.settings-search .search-ac {
+  flex: 1;
+}
+.settings-search .search {
+  height: 38px;
+}
+.settings-inner.searching .settings-tabs {
+  opacity: 0.4;
+  pointer-events: none;
+}
+.settings-inner .srch-hide {
+  display: none !important;
+}
+.settings-noresult {
+  margin-top: 12px;
+}
+::highlight(settings-search) {
+  background-color: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* Online grid cards: fixed 5-row tag area, like the local tiles. TagList fits
+   the tags to its box height — with an auto-height box that was a feedback
+   loop: one measurement taken while the card was off-screen / hidden (mode
+   switch, content-visibility) gave ~0 rows, the box shrank to match, and every
+   later measurement kept it at one row. */
+.browse-grid:not(.list) .gcard-tags {
+  height: calc(24px * 5 + 4px * 4 + 16px);
+  overflow: hidden;
+  flex: none;
+}
+
+/* 설정 › 단축키 rows: combo chips (<kbd>) with ×, then + (record) and 기본값. */
+.key-combos {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.key-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 26px;
+  padding: 0 4px 0 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+  background: var(--bg-2);
+}
+.key-chip kbd {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.key-x {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  border-radius: var(--r2);
+  color: var(--text-dim);
+  font-size: 12px;
+  cursor: pointer;
+}
+.key-x:hover {
+  background: var(--danger);
+  color: #fff;
+}
+.key-none {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.key-add.on {
+  padding: 0 8px;
+}
+.key-wait {
+  font-size: 12px;
+  line-height: 1;
+}
+.key-note {
+  color: var(--accent);
+}
+
+/* Reusable flat button group (the app's default button look): inactive
+   buttons have no fill or outline, short vertical dividers separate them, and
+   the button shape (purple tint + outline) appears on hover. Wrap any row of
+   .mini buttons in .flat-group to get it. */
+.flat-group {
+  display: inline-flex;
+  align-items: center;
+  /* Spacing comes only from the divider margins below — a parent's gap (e.g.
+     .glance-actions) would push the left item further from the divider. */
+  gap: 0;
+}
+.flat-group > * + * {
+  position: relative;
+  margin-left: 11px;
+}
+.flat-group > * + *::before {
+  content: '';
+  position: absolute;
+  left: -6px;
+  top: 50%;
+  width: 1px;
+  height: 14px;
+  margin-top: -7px;
+  background: var(--line);
+  pointer-events: none;
+}
+.flat-group .mini:not(.on) {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-dim);
+}
+.flat-group .mini:not(.on):hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text-hover);
+}
+.flat-group .mini:disabled {
+  opacity: 0.4;
+}
+
+/* Reader bottom bar buttons (모드 · 맞춤 · 번역) + glance window buttons:
+   icon + label spacing; glance icon buttons square. */
+.glance-actions.flat-group .mini.icon {
+  width: 30px;
+  height: 28px;
+  font-size: 17px;
+}
+
+/* Fixed widths (fit the longest label of each) so cycling 스크롤/클릭넘김/두 쪽,
+   the fit modes or 번역/번역 끄기 doesn't resize the buttons and make the page
+   slider beside them grow and shrink. */
+/* Reader bottom-bar buttons: the icon is the main element, a small label sits
+   centered under it. All three share one fixed width, so cycling the mode /
+   fit / translate label never resizes them (or the page slider beside them). */
+.reader-btns .mini {
+  flex-direction: column;
+  justify-content: center;
+  gap: 0;
+  width: 64px;
+  height: auto;
+  padding: 1px 0;
+}
+.reader-btns .mini .micon {
+  font-size: 20px;
+}
+.reader-btns .btn-label {
+  font-size: 10px;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+/* Custom zoom (no fit icon): the % alone stands in for the icon. */
+.reader-btns .btn-label:only-child {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Slimmer reader bottom bar (~2/3 of before): just enough room around the
+   stacked icon buttons. */
+.reader-bottom {
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
+/* Reader list/pane divider: no visible gap — the 5px strip broke the reader's
+   head/bottom bars apart from the list. It's 0px wide now (the list's own
+   inset line is the separator) and keeps a 6px invisible drag area over the
+   seam. */
+.divider {
+  width: 0;
+}
+.divider:not(.collapsed)::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  width: 6px;
+  z-index: 4;
+  cursor: col-resize;
+}
+
+/* Glance window: 닫기 highlights red (hover and press), like other close/delete
+   buttons. */
+.glance-actions.flat-group .mini.icon:last-child:hover:not(:disabled) {
+  background: var(--danger);
+  border-color: transparent;
+  color: #fff;
+}
+.glance-actions.flat-group .mini.icon:last-child:active:not(:disabled) {
+  background: var(--danger);
+  box-shadow: inset 0 0 0 999px var(--press-veil);
+  color: #fff;
+}
+
+/* Reader head: icon buttons (← 목록, 폴더 열기 / 다운로드) — flat, no outline. */
+.reader-head .reader-back,
+.reader-head-btns .mini {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-dim);
+}
+.reader-head .reader-back:hover,
+.reader-head-btns .mini:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text-hover);
+}
+.reader-head .mini.icon {
+  width: 30px;
+  height: 28px;
+  padding: 0;
+  font-size: 18px;
+}
+.reader-head-btns .mini.busy {
+  opacity: 0.5;
+}
+.reader-head-btns .mini.dl-ok {
+  color: var(--ok, var(--success));
+  opacity: 1;
+}
+/* Bottom bar shares the title bar's background. */
+.reader-bottom {
+  background: var(--head-bg);
+}
+/* Small sidebar dropdown (온라인 정렬): opens toward the left like 그룹 ▾. */
+.dropdown:has(> .dd-mini) .dropdown-panel {
+  left: auto;
+  right: 0;
+  min-width: max-content;
+  white-space: nowrap;
+}
+.dropdown:has(> .dd-mini) {
+  flex-shrink: 0;
+}
+/* Head icon buttons sit closer to the bar's edges (the icons have their own
+   inner padding, so the bar padding read as too wide). */
+.reader-head .reader-back {
+  margin-left: -8px;
+}
+.reader-head-btns {
+  margin-right: -8px;
+}
+
+/* Glance title: Note Stack icon + "Overview". */
+.glance-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.glance-title .micon {
+  font-size: 17px;
+}
+
+/* Sidebar search row: the search button and the 그룹 / 정렬 dropdown are flat
+   (no outline/fill) with a short divider between them, like the rest. */
+.lib-search-row > .mini,
+.lib-search-row > .grp-filter .mini,
+.lib-search-row > .dropdown .mini {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-dim);
+}
+.lib-search-row > .mini:hover,
+.lib-search-row > .grp-filter .mini:hover,
+.lib-search-row > .dropdown .mini:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text-hover);
+}
+.lib-search-row > .grp-filter .mini.on {
+  background: var(--accent);
+  border-color: transparent;
+  color: #fff;
+}
+.lib-search-row > .mini + .grp-filter,
+.lib-search-row > .mini + .dropdown {
+  position: relative;
+  margin-left: 5px;
+}
+.lib-search-row > .mini + .grp-filter::before,
+.lib-search-row > .mini + .dropdown::before {
+  content: '';
+  position: absolute;
+  left: -6px;
+  top: 50%;
+  width: 1px;
+  height: 14px;
+  margin-top: -7px;
+  background: var(--line);
+  pointer-events: none;
+}
+
+/* Work cards / list rows give the same click feedback as buttons: a brief
+   brightness step while pressed (selected or not). A filter (not the veil
+   box-shadow) so it also covers the cover image. */
+.work-card,
+.gtile,
+.gcard,
+.lib-item,
+.chapter-row {
+  transition: filter 0.08s ease-out;
+}
+.work-card:active,
+.gtile:active,
+.gcard:active,
+.lib-item:active,
+.chapter-row:active {
+  filter: var(--press-filter);
+}
+/* …but not when the press is on a button / tag / input inside the card —
+   those have their own feedback. */
+.work-card:has(button:active, .tag:active, input:active, .star:active, .seg :active),
+.gtile:has(button:active, .tag:active, input:active, .star:active, .seg :active),
+.gcard:has(button:active, .tag:active, input:active, .star:active, .seg :active),
+.lib-item:has(button:active, .tag:active, input:active, .star:active, .seg :active),
+.chapter-row:has(button:active, .tag:active, input:active, .star:active, .seg :active) {
+  filter: none;
+}
+
+/* Sidebar search button: a bit smaller. */
+.lib-search-row > .mini:not(.dd-mini) {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  font-size: 14px;
+}
+
+
+/* Dropdowns left of the main search boxes (정렬 · 언어 · 제목/작가): flat like
+   the toolbar row — no fill/outline until hovered, a short divider between
+   neighbouring dropdowns. */
+.search-row > .dropdown .dropdown-btn {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-dim);
+  height: 44px;
+}
+.search-row > .dropdown .dropdown-btn:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text-hover);
+}
+.search-row > .dropdown {
+  position: relative;
+}
+/* Divider only BETWEEN dropdowns — none before the search box. */
+.search-row > .dropdown:has(+ .dropdown) {
+  margin-right: 5px;
+}
+.search-row > .dropdown:has(+ .dropdown)::after {
+  content: '';
+  position: absolute;
+  right: -7px;
+  top: 50%;
+  width: 1px;
+  height: 16px;
+  margin-top: -8px;
+  background: var(--line);
+  pointer-events: none;
 }

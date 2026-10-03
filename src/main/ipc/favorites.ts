@@ -7,7 +7,7 @@
 //  • Lists: a file imported as a named list of codes (browse them online, or
 //    the downloaded ones in the library).
 import { ipcMain, dialog } from 'electron'
-import { basename } from 'path'
+import { basename, dirname } from 'path'
 import { promises as fs } from 'fs'
 import type { OnlineFav } from '../../shared/types'
 import { IPC } from '../../shared/ipc'
@@ -43,7 +43,128 @@ function rankOf(code: string): number {
   return r
 }
 
+// ---------- rating files ----------
+// Ratings are exported per library mode — 동인지 and 일반 만화 never mix:
+//   동인지:   { library: 'doujin', ratings: { doujin: {code: n}, local: {...} }, ranks: {code: n} }
+//   일반 만화: { library: 'manga',  ratings: { online: {url: n}, local: {...} } }
+// `ranks` repeats the doujin ratings at top level (same as the favorites file).
+// Local works without a code are keyed by their last two path segments
+// (series/chapter or group/work) so the file works on another PC too.
+type Lib = 'hitomi' | 'normal'
+type RatingFile = { doujin: Record<string, number>; online: Record<string, number>; local: Record<string, number> }
+const localKey = (path: string): string => `${basename(dirname(path))}/${basename(path)}`.toLowerCase()
+const libOf = (w: { library?: Lib }): Lib => w.library ?? 'hitomi'
+
+function collectRatings(lib: Lib): RatingFile {
+  const out: RatingFile = { doujin: {}, online: {}, local: {} }
+  for (const f of store.onlineFavs.values()) {
+    if (!(f.rank > 0)) continue
+    if (lib === 'hitomi' && isGalleryCode(f.code)) out.doujin[f.code] = Math.max(out.doujin[f.code] ?? 0, f.rank)
+    if (lib === 'normal' && !isGalleryCode(f.code)) out.online[f.code] = f.rank
+  }
+  for (const w of store.works.values()) {
+    if (!(w.rank > 0) || libOf(w) !== lib) continue
+    if (w.code && lib === 'hitomi') out.doujin[w.code] = Math.max(out.doujin[w.code] ?? 0, w.rank)
+    else if (!w.code) out.local[localKey(w.path)] = w.rank
+  }
+  return out
+}
+
+function parseRatings(raw: any, lib: Lib): RatingFile {
+  const r = raw?.ratings ?? {}
+  const num = (o: any): Record<string, number> => {
+    const m: Record<string, number> = {}
+    for (const [k, v] of Object.entries(o ?? {})) {
+      const n = Math.round(Number(v))
+      if (n > 0) m[k] = Math.min(5, n)
+    }
+    return m
+  }
+  // A file from the other mode contributes nothing here.
+  const fileLib: Lib | null = raw?.library === 'manga' ? 'normal' : raw?.library === 'doujin' ? 'hitomi' : null
+  if (fileLib && fileLib !== lib) return { doujin: {}, online: {}, local: {} }
+  return lib === 'hitomi'
+    ? // Plain favorites files carry ranks at top level — accept them too.
+      { doujin: { ...num(raw?.ranks), ...num(r.doujin) }, online: {}, local: num(r.local) }
+    : { doujin: {}, online: num(r.online), local: num(r.local) }
+}
+
+const countRatings = (r: RatingFile): number =>
+  Object.keys(r.doujin).length + Object.keys(r.online).length + Object.keys(r.local).length
+
+const fileOf = (lib: Lib, r: RatingFile): unknown =>
+  lib === 'hitomi'
+    ? { library: 'doujin', ratings: { doujin: r.doujin, local: r.local }, ranks: r.doujin }
+    : { library: 'manga', ratings: { online: r.online, local: r.local } }
+
 export function registerFavoritesIpc(): void {
+  ipcMain.handle(IPC.exportRatings, async (_e, lib: Lib) => {
+    const ratings = collectRatings(lib)
+    const path = await saveJsonAs('평점 내보내기', lib === 'hitomi' ? 'ratings-doujin.json' : 'ratings-manga.json')
+    if (!path) return { ok: false, count: 0 }
+    await writeJson(path, fileOf(lib, ratings))
+    return { ok: true, count: countRatings(ratings), path }
+  })
+
+  // Apply a rating file: each rating in it is set (doujin codes on the list
+  // entry and any local copy; online urls on the list entry; local works by
+  // path key). Ratings not in the file are left alone.
+  ipcMain.handle(IPC.importRatings, async (_e, lib: Lib) => {
+    const file = await pickJson('평점 불러오기 (병합)')
+    if (!file) return { ok: false, applied: 0, total: 0 }
+    let r: RatingFile
+    try {
+      r = parseRatings(await readJson(file), lib)
+    } catch {
+      return { ok: false, applied: 0, total: 0 }
+    }
+    let applied = 0
+    for (const [code, n] of Object.entries(r.doujin)) {
+      store.setOnlineFav(code, { rank: n })
+      applied++
+      for (const w of store.works.values()) if (w.code === code) store.update(w.id, { rank: n })
+    }
+    for (const [url, n] of Object.entries(r.online)) {
+      store.setOnlineFav(url, { rank: n })
+      applied++
+    }
+    const byKey = new Map<string, string[]>()
+    for (const w of store.works.values()) {
+      if (w.code || libOf(w) !== lib) continue
+      const k = localKey(w.path)
+      byKey.set(k, [...(byKey.get(k) ?? []), w.id])
+    }
+    for (const [k, n] of Object.entries(r.local)) {
+      const ids = byKey.get(k.toLowerCase())
+      if (!ids) continue
+      for (const id of ids) store.update(id, { rank: n })
+      applied++
+    }
+    await store.saveOnline()
+    await store.flushWorks()
+    return { ok: true, applied, total: countRatings(r) }
+  })
+
+  // Merge several rating files into one new file (the higher rating wins).
+  ipcMain.handle(IPC.mergeRatings, async (_e, lib: Lib) => {
+    const files = await pickJsons('병합할 평점 파일 선택 (2개 이상)')
+    if (!files.length) return { ok: false, count: 0, files: 0 }
+    const out: RatingFile = { doujin: {}, online: {}, local: {} }
+    for (const fp of files) {
+      try {
+        const r = parseRatings(await readJson(fp), lib)
+        for (const part of ['doujin', 'online', 'local'] as const)
+          for (const [k, v] of Object.entries(r[part])) out[part][k] = Math.max(out[part][k] ?? 0, v)
+      } catch {
+        /* skip unreadable file */
+      }
+    }
+    const path = await saveJsonAs('병합 결과 저장', lib === 'hitomi' ? 'ratings-doujin-merged.json' : 'ratings-manga-merged.json')
+    if (!path) return { ok: false, count: countRatings(out), files: files.length }
+    await writeJson(path, fileOf(lib, out))
+    return { ok: true, count: countRatings(out), files: files.length, path }
+  })
+
   // ---------- hearts ----------
 
   ipcMain.handle(IPC.getOnlineFavs, () => [...store.onlineFavs.values()])

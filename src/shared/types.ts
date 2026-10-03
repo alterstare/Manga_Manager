@@ -161,6 +161,9 @@ export interface Settings {
   // General-manga online: genres hidden from browse/search results (client-side;
   // the site has no exclude filter). Matched against each card's genre list.
   tokiExcludeGenres: string[]
+  // Keyboard shortcut overrides (설정 › 단축키): action id → combos. Missing =
+  // the defaults in shared/shortcuts.ts; an empty list = disabled.
+  shortcuts: Partial<Record<string, string[]>>
   hitomiBaseUrl: string // doujin content/CDN host (e.g. 'gold-usergeneratedcontent.net'); '' = online disabled
   readerMode: 'scroll' | 'paged' | 'spread'
   // Last-used reader mode, remembered separately per library so doujin and
@@ -359,6 +362,7 @@ export const DEFAULT_SETTINGS: Settings = {
   bypassTunnel: false,
   resumeReading: true,
   tokiExcludeGenres: [],
+  shortcuts: {},
   hitomiBaseUrl: '',
   readerMode: 'scroll',
   lastReaderMode: { hitomi: 'scroll', normal: 'scroll' },

@@ -6,7 +6,7 @@
 // Categories are all rendered at once; CSS shows only the active one
 // (.settings-inner[data-show] hides the other <section data-cat>s), so a
 // section's local state and running tasks survive tab switches.
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { JSX } from 'react'
 import { useStore } from '../store'
 import type { Settings as SettingsT } from '../../../shared/types'
@@ -14,21 +14,25 @@ import { SPLIT_SETTING_KEYS } from '../../../shared/types'
 import { setExcluded } from '../exclude'
 import { clearTranslation } from '../translate'
 import ConfirmModal from './ConfirmModal'
+import SearchClear from './SearchClear'
+import { SearchIcon } from './icons'
 import { SettingsContext, type SettingsCtl } from './settings/context'
 import FolderSection from './settings/FolderSection'
 import TagSection from './settings/TagSection'
+import ShortcutSection from './settings/ShortcutSection'
 import StyleSection from './settings/StyleSection'
 import TranslateSection from './settings/TranslateSection'
 import NetworkSection from './settings/NetworkSection'
 import ManageSection from './settings/ManageSection'
 
-type Cat = 'folder' | 'fav' | 'style' | 'translate' | 'network' | 'manage'
+type Cat = 'folder' | 'fav' | 'style' | 'translate' | 'network' | 'keys' | 'manage'
 const CATS: { id: Cat; label: string }[] = [
   { id: 'folder', label: '폴더·저장' },
   { id: 'fav', label: '태그·검색' },
   { id: 'style', label: '스타일·정렬' },
   { id: 'translate', label: '번역' },
   { id: 'network', label: '네트워크·다운로드' },
+  { id: 'keys', label: '단축키' },
   { id: 'manage', label: '관리' }
 ]
 
@@ -129,15 +133,87 @@ export default function Settings(): JSX.Element {
     nav?.()
   }
 
+  // Settings search: while there's a query, every category is shown and each
+  // setting (a .set-block, or a standalone .set-row / hint) is kept only if its
+  // text — title, description, labels — contains the query. Sections left with
+  // no hits disappear. Matches are highlighted with the CSS Custom Highlight API
+  // (no DOM edits, so React's nodes stay untouched).
+  const [q, setQ] = useState('')
+  const innerRef = useRef<HTMLDivElement>(null)
+  const [noHits, setNoHits] = useState(false)
+  useLayoutEffect(() => {
+    const root = innerRef.current
+    if (!root) return
+    const query = q.trim().toLowerCase()
+    const hl = (CSS as unknown as { highlights?: Map<string, unknown> }).highlights
+    root.querySelectorAll('.srch-hide').forEach((e) => e.classList.remove('srch-hide'))
+    hl?.delete('settings-search')
+    if (!query) return setNoHits(false)
+    const ranges: Range[] = []
+    let total = 0
+    for (const sec of Array.from(root.querySelectorAll<HTMLElement>('section[data-cat]'))) {
+      const units: HTMLElement[] = []
+      for (const ch of Array.from(sec.children) as HTMLElement[]) {
+        if (ch.tagName === 'H2') continue
+        if (ch.matches('.set-block, .set-row') || !ch.querySelector('.set-block, .set-row')) units.push(ch)
+        else
+          units.push(
+            ...(Array.from(ch.querySelectorAll<HTMLElement>('.set-block, .set-row')).filter(
+              (u) => !u.parentElement?.closest('.set-block')
+            ) as HTMLElement[])
+          )
+      }
+      const secHit = (sec.querySelector('h2')?.textContent ?? '').toLowerCase().includes(query)
+      let hits = 0
+      for (const u of units) {
+        const hit = secHit || (u.textContent ?? '').toLowerCase().includes(query)
+        if (hit) hits++
+        else u.classList.add('srch-hide')
+      }
+      if (!hits) sec.classList.add('srch-hide')
+      total += hits
+      // Highlight every occurrence inside the visible units.
+      const walker = document.createTreeWalker(sec, NodeFilter.SHOW_TEXT)
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        const text = (n.textContent ?? '').toLowerCase()
+        if ((n.parentElement as HTMLElement | null)?.closest('.srch-hide')) continue
+        for (let i = text.indexOf(query); i >= 0; i = text.indexOf(query, i + query.length)) {
+          const r = new Range()
+          r.setStart(n, i)
+          r.setEnd(n, i + query.length)
+          ranges.push(r)
+        }
+      }
+    }
+    const HL = (window as unknown as { Highlight?: new (...r: Range[]) => unknown }).Highlight
+    if (hl && HL && ranges.length) hl.set('settings-search', new HL(...ranges))
+    setNoHits(total === 0)
+  }, [q, draft])
+
   const modeName = ctl.isHitomi ? '동인지' : '일반 만화'
   return (
     <SettingsContext.Provider value={ctl}>
       <div className="settings">
-        <div className="settings-inner" data-show={cat}>
+        <div className={`settings-inner ${q.trim() ? 'searching' : ''}`} data-show={q.trim() ? 'search' : cat} ref={innerRef}>
           <h1>설정 · {modeName}</h1>
           <p className="hint">
             이 화면은 현재 <b>{modeName}</b> 모드 설정입니다. 모드는 ☰ 메뉴에서 전환할 수 있습니다.
           </p>
+
+          <div className="settings-search">
+            <SearchIcon />
+            <div className="search-ac">
+              <input
+                className="search"
+                value={q}
+                placeholder="설정 검색 (예: 프록시, 썸네일, 다운로드)"
+                onChange={(e) => setQ(e.target.value)}
+                onKeyDown={(e) => e.key === 'Escape' && setQ('')}
+              />
+              <SearchClear value={q} onClear={() => setQ('')} />
+            </div>
+          </div>
+          {noHits && <div className="empty settings-noresult">검색 결과가 없습니다.</div>}
 
           <div className="settings-tabs">
             {CATS.map((c) => (
@@ -156,6 +232,7 @@ export default function Settings(): JSX.Element {
           <StyleSection />
           <TranslateSection />
           <NetworkSection />
+          <ShortcutSection />
           <ManageSection />
 
           <div className="settings-actions">

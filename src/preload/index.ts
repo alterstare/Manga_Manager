@@ -42,6 +42,9 @@ const api: Api = {
     return () => ipcRenderer.removeListener(IPC.onlineFavPreloadProgress, listener)
   },
   mergeFavorites: () => ipcRenderer.invoke(IPC.mergeFavorites),
+  exportRatings: (lib) => ipcRenderer.invoke(IPC.exportRatings, lib),
+  importRatings: (lib) => ipcRenderer.invoke(IPC.importRatings, lib),
+  mergeRatings: (lib) => ipcRenderer.invoke(IPC.mergeRatings, lib),
   getOnlineFavs: () => ipcRenderer.invoke(IPC.getOnlineFavs),
   getReadProgress: () => ipcRenderer.invoke(IPC.getReadProgress),
   markRead: (key) => ipcRenderer.invoke(IPC.markRead, key),

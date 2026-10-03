@@ -9,7 +9,7 @@ import { useTagMenu } from './useTagMenu'
 import { hitomiFavCodes, hitomiFavGalleries } from '../favorites'
 import Stars from './Stars'
 import Dropdown from './Dropdown'
-import { CheckIcon, PauseIcon, PlayIcon, LanguageIcon, SearchIcon, FavoriteIcon, DownloadIcon, SyncIcon } from './icons'
+import { CheckIcon, PauseIcon, PlayIcon, SearchIcon, FavoriteIcon, DownloadIcon, SyncIcon } from './icons'
 import OnlineThumb from './OnlineThumb'
 import { getOnlineImages } from '../images'
 import { favMeta, tagToken } from '../util'
@@ -18,12 +18,11 @@ import type { OnlineGallery, DownloadItem } from '../store'
 import SearchClear from './SearchClear'
 import { useTabState } from './useTabState'
 
+// Sidebar keeps it short: 인기 = the yearly ranking.
 const SORTS: [OnlineSort, string][] = [
   ['date', '최신'],
-  ['today', '인기-오늘'],
-  ['week', '인기-주'],
-  ['month', '인기-월'],
-  ['year', '인기-년']
+  ['year', '인기'],
+  ['random', '랜덤']
 ]
 
 // Compact online browse list shown on the left while reading an online gallery.
@@ -41,7 +40,6 @@ export default function OnlineList(): JSX.Element {
   const onlineFavs = useStore((s) => s.onlineFavs)
   const toggleUnifiedFav = useStore((s) => s.toggleUnifiedFav)
   const setOnlineRank = useStore((s) => s.setOnlineRank)
-  const goBrowse = useStore((s) => s.goBrowse)
   // Starts from the online browse screen's source/page; once this tab searches,
   // sorts or pages, it keeps its own (per tab — other tabs' lists stay as is).
   const globalSource = useStore((s) => s.browseSource)
@@ -124,20 +122,6 @@ export default function OnlineList(): JSX.Element {
 
   return (
     <div className="lib-list">
-      <div className="lib-list-head">
-        <button className="mini" onClick={goBrowse} title="온라인">
-          <LanguageIcon />
-        </button>
-        <Dropdown<OnlineSort>
-          className="field sm"
-          value={source.kind === 'index' ? source.sort ?? 'date' : 'date'}
-          onChange={(v) => {
-            setBrowsePage(0)
-            setBrowseSource({ kind: 'index', language: lang, sort: v })
-          }}
-          options={SORTS}
-        />
-      </div>
       <div className="lib-search-row">
         <div className="search-ac">
           <input
@@ -145,13 +129,24 @@ export default function OnlineList(): JSX.Element {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && apply()}
-            placeholder="제목, 코드, 태그, artist:작가명 / tag:태그명 으로 검색 후 Enter"
+            placeholder="검색 후 Enter"
           />
           <SearchClear value={input} onClear={() => setInput('')} />
         </div>
         <button className="mini" onClick={apply} title="검색">
           <SearchIcon />
         </button>
+        {/* Sort — same spot as the local list's 그룹 ▾ button. */}
+        <Dropdown<OnlineSort>
+          mini
+          className="grp-filter"
+          value={source.kind === 'index' ? (['today', 'week', 'month'].includes(source.sort ?? '') ? 'year' : source.sort ?? 'date') : 'date'}
+          onChange={(v) => {
+            setBrowsePage(0)
+            setBrowseSource({ kind: 'index', language: lang, sort: v })
+          }}
+          options={SORTS}
+        />
       </div>
       <div className="lib-list-scroll">
         {error && <div className="warn err">{error}</div>}

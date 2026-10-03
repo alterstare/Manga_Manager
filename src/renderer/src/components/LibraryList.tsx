@@ -217,7 +217,7 @@ export default function LibraryList(): JSX.Element {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && apply()}
-            placeholder="검색 후 Enter (태그/작가 클릭 시 추가)"
+            placeholder="검색 후 Enter"
           />
           <SearchClear value={input} onClear={() => setInput('')} />
         </div>
